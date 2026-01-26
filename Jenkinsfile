@@ -41,14 +41,15 @@ pipeline {
         }
 
         stage('Docker Deploy') {
-            steps {
-                bat '''
-                docker stop %CONTAINER_NAME% || exit 0
-                docker rm %CONTAINER_NAME% || exit 0
-                docker run -d -p 5000:5000 --name %CONTAINER_NAME% %IMAGE_NAME%
-                '''
-            }
-        }
+    steps {
+        bat '''
+        docker ps -a | findstr %CONTAINER_NAME% && docker stop %CONTAINER_NAME% || echo Container not running
+        docker ps -a | findstr %CONTAINER_NAME% && docker rm %CONTAINER_NAME% || echo Container not present
+        docker run -d -p 5000:5000 --name %CONTAINER_NAME% %IMAGE_NAME%
+        '''
+    }
+}
+
     }
 
     post {
