@@ -4,7 +4,7 @@ app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "CI/CD MVP App is running!"
+    return "WEBHOOK CI/CD WORKING"
 
 @app.route("/health")
 def health():
