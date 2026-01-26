@@ -1,20 +1,22 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "cicd-mvp-app"
+        CONTAINER_NAME = "cicd-mvp-container"
+    }
+
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code...'
                 checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo 'Setting up Python 3.12 virtual environment and installing dependencies...'
                 bat '''
-                py -3.12 --version
                 py -3.12 -m venv venv
                 venv\\Scripts\\python -m pip install --upgrade pip
                 venv\\Scripts\\python -m pip install -r requirements.txt
@@ -24,9 +26,26 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo 'Running unit tests...'
                 bat '''
                 venv\\Scripts\\python -m pytest
+                '''
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                bat '''
+                docker build -t %IMAGE_NAME% .
+                '''
+            }
+        }
+
+        stage('Docker Deploy') {
+            steps {
+                bat '''
+                docker stop %CONTAINER_NAME% || exit 0
+                docker rm %CONTAINER_NAME% || exit 0
+                docker run -d -p 5000:5000 --name %CONTAINER_NAME% %IMAGE_NAME%
                 '''
             }
         }
@@ -34,10 +53,10 @@ pipeline {
 
     post {
         success {
-            echo '✅ CI Pipeline completed successfully!'
+            echo '🚀 CI/CD pipeline completed. App deployed in Docker.'
         }
         failure {
-            echo '❌ CI Pipeline failed. Fix errors before deploying.'
+            echo '❌ Pipeline failed. Deployment aborted.'
         }
     }
 }
