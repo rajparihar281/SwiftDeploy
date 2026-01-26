@@ -12,12 +12,12 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Setting up Python virtual environment and installing dependencies...'
+                echo 'Setting up Python 3.12 virtual environment and installing dependencies...'
                 bat '''
-                python --version
-                python -m venv venv
-                venv\\Scripts\\pip install --upgrade pip
-                venv\\Scripts\\pip install -r requirements.txt
+                py -3.12 --version
+                py -3.12 -m venv venv
+                venv\\Scripts\\python -m pip install --upgrade pip
+                venv\\Scripts\\python -m pip install -r requirements.txt
                 '''
             }
         }
@@ -26,7 +26,7 @@ pipeline {
             steps {
                 echo 'Running unit tests...'
                 bat '''
-                venv\\Scripts\\pytest
+                venv\\Scripts\\python -m pytest
                 '''
             }
         }
