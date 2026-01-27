@@ -19,7 +19,7 @@ def health():
 
 @app.route("/hello")
 def hello():
-    return jsonify(message="Hello from CI/CD pipeline!")
+    return jsonify(message="Hello gu kha from CI/CD pipeline!")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

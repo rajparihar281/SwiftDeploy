@@ -18,3 +18,8 @@ def test_hello():
     assert response.status_code == 200
     assert "Hello" in response.json["message"]
 
+def test_about():
+    client = app.app.test_client()
+    response = client.get("/about")
+    assert response.status_code == 200
+    assert b"SwiftDeploy" in response.data
