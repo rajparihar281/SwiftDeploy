@@ -6,6 +6,14 @@ app = Flask(__name__)
 def home():
     return "WEBHOOK CI/CD WORKING"
 
+@app.route("/about")
+def about():
+    return jsonify({
+        "project": "SwiftDeploy",
+        "description": "CI/CD pipeline using Jenkins, Docker and GitHub",
+        "author": "Raj Parihar"
+    })
+    
 @app.route("/health")
 def health():
     return jsonify(status="OK")
