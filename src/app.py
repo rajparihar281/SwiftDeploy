@@ -11,7 +11,7 @@ def about():
     return jsonify({
         "project": "SwiftDeploy",
         "description": "CI/CD pipeline using Jenkins, Docker and GitHub",
-        "author": "Raj Parihar"
+        "author": "vaishnavi Patil"
     })
 @app.route("/health")
 def health():
