@@ -13,7 +13,6 @@ def about():
         "description": "CI/CD pipeline using Jenkins, Docker and GitHub",
         "author": "Raj Parihar"
     })
-    
 @app.route("/health")
 def health():
     return jsonify(status="OK")
