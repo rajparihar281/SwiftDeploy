@@ -3,33 +3,66 @@ pipeline {
 
     stages {
 
-        stage('Run Tests') {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Setup Python Environment') {
             steps {
                 script {
-                    try {
-                        sh 'pytest'
-                        env.TEST_STATUS = "PASSED"
-                    } catch (err) {
-                        env.TEST_STATUS = "FAILED"
-                    }
+                    bat 'python -m venv venv'
+                    bat 'venv\\Scripts\\pip install -r requirements.txt'
                 }
             }
         }
 
-        stage('Collect Metrics & Evaluate') {
+        stage('Run Pytest & Measure Time') {
+            steps {
+                script {
+
+                    def startTime = System.currentTimeMillis()
+
+                    try {
+                        def testOutput = bat(
+                            script: 'venv\\Scripts\\pytest -v',
+                            returnStdout: true
+                        ).trim()
+
+                        echo testOutput
+                        env.TEST_STATUS = "PASSED"
+                        env.TEST_LOG = testOutput
+
+                    } catch (err) {
+
+                        env.TEST_STATUS = "FAILED"
+                        env.TEST_LOG = err.getMessage()
+                    }
+
+                    def endTime = System.currentTimeMillis()
+                    def buildDuration = (endTime - startTime) / 1000
+
+                    echo "Build Duration (seconds): ${buildDuration}"
+                    env.BUILD_DURATION = buildDuration.toString()
+                }
+            }
+        }
+
+        stage('Evaluate Intelligence Engine') {
             steps {
                 script {
 
                     def metricsJson = """
                     {
                         "metrics": {
-                            "cpu": 60,
-                            "memory": 55,
+                            "cpu": 50,
+                            "memory": 50,
                             "disk": 40,
-                            "build_time": 120
+                            "build_time": ${env.BUILD_DURATION}
                         },
                         "test_status": "${env.TEST_STATUS}",
-                        "log_text": ""
+                        "log_text": ${groovy.json.JsonOutput.toJson(env.TEST_LOG)}
                     }
                     """
 
@@ -58,7 +91,6 @@ pipeline {
             }
             steps {
                 echo "Deploying application..."
-                sh 'echo Deployment successful'
             }
         }
     }
