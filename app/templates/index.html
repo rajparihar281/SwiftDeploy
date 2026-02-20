@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CI/CD Intelligence Control System</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            font-family: monospace;
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: #1e293b;
+            padding: 20px;
+            font-size: 20px;
+            border-bottom: 1px solid #334155;
+        }
+
+        .container {
+            padding: 20px;
+        }
+
+        .panel {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+        }
+
+        .status-allow {
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .status-block {
+            color: #ef4444;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #334155;
+        }
+
+        canvas {
+            background-color: #1e293b;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    CI/CD Intelligence Control System
+</header>
+
+<div class="container">
+
+    <!-- Latest Build Panel -->
+    <div class="panel">
+        <h2>Latest Build Status</h2>
+
+        {% if latest %}
+            <p><strong>Build ID:</strong> {{ latest[0] }}</p>
+            <p><strong>Waste Score:</strong> {{ latest[1] }}</p>
+            <p>
+                <strong>Decision:</strong>
+                <span class="{{ 'status-allow' if latest[2]=='ALLOW' else 'status-block' }}">
+                    {{ latest[2] }}
+                </span>
+            </p>
+            <p><strong>Timestamp:</strong> {{ latest[3] }}</p>
+        {% else %}
+            <p>No builds recorded yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Waste Trend Graph -->
+    <div class="panel">
+        <h2>Waste Score Trend</h2>
+        <canvas id="wasteChart"></canvas>
+    </div>
+
+    <!-- Build History -->
+    <div class="panel">
+        <h2>Build History</h2>
+        <table>
+            <tr>
+                <th>ID</th>
+                <th>Build ID</th>
+                <th>Waste Score</th>
+                <th>Decision</th>
+                <th>Timestamp</th>
+            </tr>
+            {% for build in history %}
+            <tr>
+                <td>{{ build[0] }}</td>
+                <td>{{ build[1] }}</td>
+                <td>{{ build[2] }}</td>
+                <td>{{ build[3] }}</td>
+                <td>{{ build[4] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+
+</div>
+
+<!-- Hidden JSON Data -->
+<script id="chart-data" type="application/json">
+{
+    "labels": {{ chart_labels | tojson }},
+    "data": {{ chart_data | tojson }}
+}
+</script>
+
+<script>
+    const chartDataElement = document.getElementById("chart-data");
+    const chartData = JSON.parse(chartDataElement.textContent);
+
+    const ctx = document.getElementById('wasteChart').getContext('2d');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.labels.reverse(),
+            datasets: [{
+                label: 'Waste Score',
+                data: chartData.data.reverse(),
+                borderColor: '#38bdf8',
+                tension: 0.3
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    min: 0,
+                    max: 100
+                }
+            }
+        }
+    });
+</script>
+</body>
+</html>

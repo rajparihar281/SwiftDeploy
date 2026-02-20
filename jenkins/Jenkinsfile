@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    try {
+                        sh 'pytest'
+                        env.TEST_STATUS = "PASSED"
+                    } catch (err) {
+                        env.TEST_STATUS = "FAILED"
+                    }
+                }
+            }
+        }
+
+        stage('Collect Metrics & Evaluate') {
+            steps {
+                script {
+
+                    def metricsJson = """
+                    {
+                        "metrics": {
+                            "cpu": 60,
+                            "memory": 55,
+                            "disk": 40,
+                            "build_time": 120
+                        },
+                        "test_status": "${env.TEST_STATUS}",
+                        "log_text": ""
+                    }
+                    """
+
+                    def response = httpRequest(
+                        httpMode: 'POST',
+                        contentType: 'APPLICATION_JSON',
+                        requestBody: metricsJson,
+                        url: 'http://localhost:5000/api/evaluate'
+                    )
+
+                    def result = readJSON text: response.content
+
+                    echo "Decision: ${result.decision}"
+                    echo "Waste Score: ${result.waste_score}"
+
+                    if (result.decision == "BLOCK") {
+                        error("Deployment Blocked by Decision Engine")
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                expression { return env.TEST_STATUS == "PASSED" }
+            }
+            steps {
+                echo "Deploying application..."
+                sh 'echo Deployment successful'
+            }
+        }
+    }
+}

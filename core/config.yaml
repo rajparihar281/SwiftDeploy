@@ -1,0 +1,14 @@
+thresholds:
+  cpu_max: 75
+  memory_max: 80
+  build_time_max: 180
+  waste_score_max: 65
+
+weights:
+  cpu: 0.4
+  memory: 0.3
+  time: 0.3
+
+policies:
+  block_on_test_failure: true
+  block_on_high_waste: true
