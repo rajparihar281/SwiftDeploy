@@ -101,7 +101,7 @@ def simulate_build():
 
     ReportBuilder.save_to_database(report)
 
-    return report
+    return jsonify(report)
 
 
 # --------------------------------------------------
@@ -110,39 +110,45 @@ def simulate_build():
 
 @app.route("/api/evaluate", methods=["POST"])
 def api_evaluate():
-    data = request.json
+    try:
+        data = request.json
 
-    metrics = data.get("metrics")
-    test_status = data.get("test_status")
-    log_text = data.get("log_text", "")
-    failure_signature = None
-    recurrence_count = 0
-    explanation = None
-    decision_data = evaluate_build(metrics, test_status)
-    
-    # 🔥 Phase 7 Intelligence Integration
-    explanation = None
-    if test_status == "FAILED":
-        explanation = parse_pytest_failure(log_text)
+        metrics = data.get("metrics")
+        test_status = data.get("test_status")
+        log_text = data.get("log_text", "")
+        failure_signature = None
+        recurrence_count = 0
+        explanation = None
+        decision_data = evaluate_build(metrics, test_status)
         
-        from services.explainer.log_parser import generate_failure_signature
-        failure_signature = generate_failure_signature(explanation)
-        recurrence_count = get_failure_recurrence(failure_signature)
-        explanation["failure_signature"] = failure_signature
-        explanation["recurrence_count"] = recurrence_count
+        # Intelligence Integration
+        if test_status == "FAILED":
+            explanation = parse_pytest_failure(log_text)
+            
+            from services.explainer.log_parser import generate_failure_signature
+            failure_signature = generate_failure_signature(explanation)
+            recurrence_count = get_failure_recurrence(failure_signature)
+            explanation["failure_signature"] = failure_signature
+            explanation["recurrence_count"] = recurrence_count
 
-    report = ReportBuilder.build_report(
-        metrics,
-        decision_data,
-        test_status
-    )
+        report = ReportBuilder.build_report(
+            metrics,
+            decision_data,
+            test_status
+        )
 
-    report["ai_explanation"] = explanation
-    report["failure_signature"] = failure_signature
+        report["ai_explanation"] = explanation
+        report["failure_signature"] = failure_signature
 
-    ReportBuilder.save_to_database(report)
+        ReportBuilder.save_to_database(report)
 
-    return jsonify(report)
+        return jsonify(report)
+
+    except Exception as e:
+        import traceback
+        print(f"[api_evaluate ERROR] {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 # --------------------------------------------------
