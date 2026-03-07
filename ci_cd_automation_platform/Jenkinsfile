@@ -1,0 +1,127 @@
+pipeline {
+    agent any
+
+    environment {
+        DOCKER_IMAGE = "ci_cd_automation_platform"
+        DOCKER_TAG = "${env.BUILD_ID}"
+    }
+
+    stages {
+        stage('Stage 1: Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Stage 2: Install Dependencies') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'python3 -m venv venv'
+                        sh 'venv/bin/pip install -r requirements.txt'
+                    } else {
+                        bat 'python -m venv venv'
+                        bat 'venv\\Scripts\\pip install -r requirements.txt'
+                    }
+                }
+            }
+        }
+
+        stage('Stage 3: Run Tests') {
+            steps {
+                script {
+                    env.TEST_STATUS = "PASSED"
+                    env.TEST_LOG = ""
+                    def startTime = System.currentTimeMillis()
+                    
+                    try {
+                        if (isUnix()) {
+                            env.TEST_LOG = sh(script: 'venv/bin/python -m pytest -v', returnStdout: true).trim()
+                        } else {
+                            env.TEST_LOG = bat(script: 'venv\\Scripts\\python -m pytest -v', returnStdout: true).trim()
+                        }
+                    } catch (err) {
+                        env.TEST_STATUS = "FAILED"
+                        env.TEST_LOG = err.getMessage()
+                    }
+                    
+                    def endTime = System.currentTimeMillis()
+                    env.BUILD_DURATION = ((endTime - startTime) / 1000).toString()
+                }
+            }
+        }
+
+        stage('Stage 4: Collect Metrics') {
+            steps {
+                echo "Metrics collected: Build Duration = ${env.BUILD_DURATION}s, Test Status = ${env.TEST_STATUS}"
+            }
+        }
+
+        stage('Stage 5: Evaluate Governance') {
+            steps {
+                script {
+                    def metricsJson = """
+                    {
+                        "metrics": {
+                            "cpu": 50,
+                            "memory": 50,
+                            "disk": 40,
+                            "build_time": ${env.BUILD_DURATION}
+                        },
+                        "test_status": "${env.TEST_STATUS}",
+                        "log_text": ${groovy.json.JsonOutput.toJson(env.TEST_LOG)}
+                    }
+                    """
+
+                    def response
+                    if (isUnix()) {
+                        response = sh(
+                            script: "curl -s -X POST -H 'Content-Type: application/json' -d '${metricsJson}' http://localhost:5000/api/evaluate",
+                            returnStdout: true
+                        ).trim()
+                    } else {
+                        // Assuming Windows with curl available
+                        // Save to file to avoid quoting issues in bat
+                        writeFile file: 'metrics.json', text: metricsJson
+                        response = bat(
+                            script: "curl -s -X POST -H \"Content-Type: application/json\" -d @metrics.json http://localhost:5000/api/evaluate",
+                            returnStdout: true
+                        ).trim()
+                    }
+
+                    def result = readJSON text: response
+                    
+                    echo "Decision: ${result.decision}"
+                    if (result.decision == "BLOCK") {
+                        error("Deployment Blocked by Decision Engine")
+                    }
+                }
+            }
+        }
+
+        stage('Stage 6: Build Docker Image') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    } else {
+                        bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+                    }
+                }
+            }
+        }
+
+        stage('Stage 7: Deploy') {
+            steps {
+                script {
+                    echo "Deploying Docker container..."
+                    if (isUnix()) {
+                        sh "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    } else {
+                        bat "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    }
+                }
+            }
+        }
+    }
+}
