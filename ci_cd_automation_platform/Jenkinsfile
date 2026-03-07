@@ -4,7 +4,6 @@ pipeline {
     environment {
         DOCKER_IMAGE = "ci_cd_automation_platform"
         DOCKER_TAG   = "${env.BUILD_ID}"
-        // Subfolder inside the repo where the platform lives
         PLATFORM_DIR = "ci_cd_automation_platform"
     }
 
@@ -35,16 +34,18 @@ pipeline {
                     def startTime   = System.currentTimeMillis()
 
                     try {
-                        env.TEST_LOG = bat(
-                            script: """
-                                cd ${env.PLATFORM_DIR}
-                                venv\\Scripts\\python -m pytest tests/ -v
-                            """,
-                            returnStdout: true
-                        ).trim()
+                        // Capture the test output
+                        bat """
+                            cd ${env.PLATFORM_DIR}
+                            venv\\Scripts\\python -m pytest tests/ -v > pytest_output.txt
+                        """
+                        env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
                     } catch (err) {
                         env.TEST_STATUS = "FAILED"
-                        env.TEST_LOG    = err.getMessage()
+                        echo "Tests Failed: ${err}"
+                        if (fileExists("${env.PLATFORM_DIR}/pytest_output.txt")) {
+                            env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
+                        }
                     }
 
                     def endTime = System.currentTimeMillis()
@@ -65,26 +66,22 @@ pipeline {
         stage('Stage 5: Evaluate Governance') {
             steps {
                 script {
-                    writeFile file: 'metrics.json', text: """{
-                        "metrics": {
-                            "cpu": 50,
-                            "memory": 60,
-                            "disk": 40,
-                            "build_time": ${env.BUILD_DURATION}
-                        },
-                        "test_status": "${env.TEST_STATUS}",
-                        "log_text": ""
-                    }"""
-
-                    def response = bat(
-                        script: 'curl -s -X POST -H "Content-Type: application/json" -d @metrics.json http://localhost:5000/api/evaluate',
-                        returnStdout: true
-                    ).trim()
-
-                    // Strip Windows cmd echo lines (lines starting with >)
-                    def jsonResponse = response.readLines().findAll { !it.startsWith(">") }.join("")
-
-                    def result = readJSON text: jsonResponse
+                    // Using httpRequest plugin which is cleaner than curl in bat
+                    def response = httpRequest httpMode: 'POST', 
+                                              contentType: 'APPLICATION_JSON', 
+                                              requestBody: """{
+                                                  "metrics": {
+                                                      "cpu": 50,
+                                                      "memory": 60,
+                                                      "disk": 40,
+                                                      "build_time": ${env.BUILD_DURATION}
+                                                  },
+                                                  "test_status": "${env.TEST_STATUS}",
+                                                  "log_text": ${JsonOutput.toJson(env.TEST_LOG)}
+                                              }""",
+                                              url: "http://localhost:5000/api/evaluate"
+                    
+                    def result = readJSON text: response.content
 
                     echo "Governance Decision: ${result.decision}"
                     echo "Waste Score: ${result.waste_score}"
@@ -108,9 +105,13 @@ pipeline {
             steps {
                 script {
                     echo "Deploying Docker container..."
-                    bat "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    // Kill existing container if exists
+                    bat "docker rm -f ci_cd_app_demo || true"
+                    bat "docker run -d -p 5050:5000 --name ci_cd_app_demo ${DOCKER_IMAGE}:${DOCKER_TAG}"
                 }
             }
         }
     }
 }
+
+import groovy.json.JsonOutput
