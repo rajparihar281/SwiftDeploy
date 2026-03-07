@@ -3,7 +3,9 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "ci_cd_automation_platform"
-        DOCKER_TAG = "${env.BUILD_ID}"
+        DOCKER_TAG   = "${env.BUILD_ID}"
+        // Subfolder inside the repo where the platform lives
+        PLATFORM_DIR = "ci_cd_automation_platform"
     }
 
     stages {
@@ -16,13 +18,11 @@ pipeline {
         stage('Stage 2: Install Dependencies') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh 'python3 -m venv venv'
-                        sh 'venv/bin/pip install -r requirements.txt'
-                    } else {
-                        bat 'python -m venv venv'
-                        bat 'venv\\Scripts\\pip install -r requirements.txt'
-                    }
+                    bat """
+                        cd ${env.PLATFORM_DIR}
+                        python -m venv venv
+                        venv\\Scripts\\pip install -r requirements.txt
+                    """
                 }
             }
         }
@@ -31,22 +31,27 @@ pipeline {
             steps {
                 script {
                     env.TEST_STATUS = "PASSED"
-                    env.TEST_LOG = ""
-                    def startTime = System.currentTimeMillis()
-                    
+                    env.TEST_LOG    = ""
+                    def startTime   = System.currentTimeMillis()
+
                     try {
-                        if (isUnix()) {
-                            env.TEST_LOG = sh(script: 'venv/bin/python -m pytest -v', returnStdout: true).trim()
-                        } else {
-                            env.TEST_LOG = bat(script: 'venv\\Scripts\\python -m pytest -v', returnStdout: true).trim()
-                        }
+                        env.TEST_LOG = bat(
+                            script: """
+                                cd ${env.PLATFORM_DIR}
+                                venv\\Scripts\\python -m pytest tests/ -v
+                            """,
+                            returnStdout: true
+                        ).trim()
                     } catch (err) {
                         env.TEST_STATUS = "FAILED"
-                        env.TEST_LOG = err.getMessage()
+                        env.TEST_LOG    = err.getMessage()
                     }
-                    
+
                     def endTime = System.currentTimeMillis()
                     env.BUILD_DURATION = ((endTime - startTime) / 1000).toString()
+
+                    echo "Build Duration (seconds): ${env.BUILD_DURATION}"
+                    echo "Test Status: ${env.TEST_STATUS}"
                 }
             }
         }
@@ -60,40 +65,32 @@ pipeline {
         stage('Stage 5: Evaluate Governance') {
             steps {
                 script {
-                    def metricsJson = """
-                    {
+                    writeFile file: 'metrics.json', text: """{
                         "metrics": {
                             "cpu": 50,
-                            "memory": 50,
+                            "memory": 60,
                             "disk": 40,
                             "build_time": ${env.BUILD_DURATION}
                         },
                         "test_status": "${env.TEST_STATUS}",
-                        "log_text": ${groovy.json.JsonOutput.toJson(env.TEST_LOG)}
-                    }
-                    """
+                        "log_text": ""
+                    }"""
 
-                    def response
-                    if (isUnix()) {
-                        response = sh(
-                            script: "curl -s -X POST -H 'Content-Type: application/json' -d '${metricsJson}' http://localhost:5000/api/evaluate",
-                            returnStdout: true
-                        ).trim()
-                    } else {
-                        // Assuming Windows with curl available
-                        // Save to file to avoid quoting issues in bat
-                        writeFile file: 'metrics.json', text: metricsJson
-                        response = bat(
-                            script: "curl -s -X POST -H \"Content-Type: application/json\" -d @metrics.json http://localhost:5000/api/evaluate",
-                            returnStdout: true
-                        ).trim()
-                    }
+                    def response = bat(
+                        script: 'curl -s -X POST -H "Content-Type: application/json" -d @metrics.json http://localhost:5000/api/evaluate',
+                        returnStdout: true
+                    ).trim()
 
-                    def result = readJSON text: response
-                    
-                    echo "Decision: ${result.decision}"
+                    // Strip Windows cmd echo lines (lines starting with >)
+                    def jsonResponse = response.readLines().findAll { !it.startsWith(">") }.join("")
+
+                    def result = readJSON text: jsonResponse
+
+                    echo "Governance Decision: ${result.decision}"
+                    echo "Waste Score: ${result.waste_score}"
+
                     if (result.decision == "BLOCK") {
-                        error("Deployment Blocked by Decision Engine")
+                        error("Deployment BLOCKED by Governance Engine: ${result.violations}")
                     }
                 }
             }
@@ -102,11 +99,7 @@ pipeline {
         stage('Stage 6: Build Docker Image') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                    } else {
-                        bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
-                    }
+                    bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ${env.PLATFORM_DIR}"
                 }
             }
         }
@@ -115,11 +108,7 @@ pipeline {
             steps {
                 script {
                     echo "Deploying Docker container..."
-                    if (isUnix()) {
-                        sh "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    } else {
-                        bat "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
-                    }
+                    bat "docker run -d -p 5050:5000 --name ci_cd_app_${DOCKER_TAG} ${DOCKER_IMAGE}:${DOCKER_TAG}"
                 }
             }
         }
