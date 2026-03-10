@@ -89,6 +89,12 @@ pipeline {
                     def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                     def testStatus = env.TEST_STATUS == "PASSED" ? "completed" : "failed"
 
+                    // Parse test counts safely using NonCPS helper
+                    def counts = parsePytestOutput(env.TEST_LOG)
+                    def passCount = counts.pass
+                    def failCount = counts.fail
+                    def skipCount = counts.skip
+
                     def body = JsonOutput.toJson([
                         pipeline_id: env.PIPELINE_ID,
                         stage_test_start: stageStart,
