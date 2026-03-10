@@ -10,26 +10,61 @@ class JenkinsService:
         self.job_name = os.getenv("JENKINS_JOB_NAME", "CI-CD-Intelligence-Test")
         self.client = JenkinsClient(self.url, self.user, self.token)
 
-    def sync_pipelines(self):
-        """Fetch latest builds and map them to our internal pipeline schema."""
+    def sync_pipelines(self, db_conn=None):
+        """Fetch latest builds from Jenkins and sync them into our local database."""
         raw_builds = self.client.get_build_list(self.job_name)
-        pipelines = []
         
-        for build in raw_builds[:10]: # Process latest 10 builds
+        for build in raw_builds[:10]:
             build_num = build['number']
-            wf_data = self.client.get_pipeline_wf_api(self.job_name, build_num)
             
-            pipeline = {
-                "pipeline_id": f"JNK-{build_num}",
-                "repository": self.job_name, # Fallback if repository name isn't in build params
-                "status": self._map_status(build),
-                "created_at": self._format_ts(build.get("timestamp")),
-                "total_pipeline_duration": build.get("duration", 0) / 1000.0, # Jenkins is in ms
-                "stages": self._map_stages(wf_data) if wf_data else []
-            }
-            pipelines.append(pipeline)
+            # Get full build details to extract parameters
+            status_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json"
+            import requests
+            res = requests.get(status_url, auth=self.client.auth)
+            full_build = res.json() if res.status_code == 200 else {}
             
-        return pipelines
+            # Extract PIPELINE_ID from parameters if present
+            params = {}
+            for action in full_build.get("actions", []):
+                if action.get("_class") == "hudson.model.ParametersAction":
+                    for p in action.get("parameters", []):
+                        params[p.get("name")] = p.get("value")
+            
+            pipeline_id = params.get("PIPELINE_ID") or f"JNK-{build_num}"
+            status = self._map_status(build)
+            
+            if db_conn:
+                # Check if we have a record for this pipeline_id
+                existing = db_conn.execute("SELECT id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+                
+                if existing:
+                    # Update status and duration if it's still running or just finished
+                    db_conn.execute("""
+                        UPDATE pipelines 
+                        SET status = ?, 
+                            total_pipeline_duration = ?,
+                            updated_at = ?
+                        WHERE pipeline_id = ?
+                    """, (
+                        status, 
+                        build.get("duration", 0) / 1000.0,
+                        datetime.utcnow().isoformat(),
+                        pipeline_id
+                    ))
+                else:
+                    # Create new record for untracked (e.g. manual) build
+                    db_conn.execute("""
+                        INSERT INTO pipelines (pipeline_id, repository, branch, status, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (
+                        pipeline_id,
+                        self.job_name,
+                        params.get("BRANCH", "main"),
+                        status,
+                        self._format_ts(build.get("timestamp")),
+                        datetime.utcnow().isoformat()
+                    ))
+                db_conn.commit()
 
     def _map_status(self, build):
         if build.get("building"):

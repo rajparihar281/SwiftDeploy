@@ -5,10 +5,10 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "ci_cd_automation_platform"
-        DOCKER_TAG   = "${env.BUILD_ID}"
-        PLATFORM_DIR = "ci_cd_automation_platform"
-        PLATFORM_API = "http://localhost:5000"
-        PIPELINE_ID  = "PL-${env.BUILD_ID}-${System.currentTimeMillis()}"
+        DOCKER_TAG   = "${params.COMMIT_ID ?: env.BUILD_ID}"
+        PLATFORM_DIR = "."
+        PLATFORM_API = "https://jerold-nonimpressionistic-glynis.ngrok-free.dev" // Update this for ngrok exposure!
+        PIPELINE_ID  = "${params.PIPELINE_ID ?: 'PL-' + env.BUILD_ID}"
     }
 
     stages {
@@ -17,7 +17,10 @@ pipeline {
                 script {
                     def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                     try {
+                        // Priority 1: Real SCM Checkout if repository is configured
+                        // Priority 2: Fallback to local checkout if triggered manually
                         checkout scm
+                        
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         reportStage('checkout', stageStart, stageEnd, 'completed')
                     } catch (err) {

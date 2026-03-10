@@ -11,20 +11,25 @@ Ensure the following plugins are installed in Jenkins:
 ## 2. Jenkins Job Configuration
 1. Open your Jenkins job (e.g., `CI-CD-Intelligence-Test`).
 2. Go to **Configure**.
-3. Under **Build Triggers**, check:
-   - `[x] GitHub hook trigger for GITScm polling`
+3. Under **Build Triggers**, ensure **NONE** are checked (we use direct REST API triggers from the backend).
 4. Under **Pipeline**, ensure:
    - **Definition**: `Pipeline script from SCM`
    - **SCM**: `Git`
-   - **Repository URL**: Your GitHub repo URL.
-   - **Script Path**: `Jenkinsfile` (verify if it is in the root or `deployment/Jenkinsfile`).
+   - **Repository URL**: `https://github.com/<your-username>/ci_cd_intelligence.git`
+   - **Branch Specifier**: `*/main` (or `${BRANCH}` if you want to support multi-branch).
+   - **Script Path**: `Jenkinsfile`
+5. **Parameters**: Add the following String Parameters:
+   - `COMMIT_ID`
+   - `BRANCH`
+   - `PIPELINE_ID`
+   - `REPO_NAME`
 
 ## 3. GitHub Webhook Configuration
 1. Go to your GitHub Repository -> **Settings** -> **Webhooks**.
 2. Click **Add webhook**.
-3. **Payload URL**: `http://<YOUR_JENKINS_SERVER>/github-webhook/`
+3. **Payload URL**: `https://jerold-nonimpressionistic-glynis.ngrok-free.dev/webhook/github`
    > [!IMPORTANT]
-   > The trailing slash `/` is required.
+   > The backend handles both trailing and non-trailing slashes.
 4. **Content type**: `application/json`
 5. **Which events would you like to trigger this webhook?**: `Just the push event.`
 6. Click **Add webhook**.

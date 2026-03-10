@@ -19,10 +19,10 @@ class JenkinsClient:
             response = requests.post(build_url, auth=self.auth)
         
         if response.status_code in [200, 201]:
-            print(f"[Jenkins] Triggered build for {job_name} successfully.")
+            print(f"[Jenkins Success] Triggered build for {job_name} successfully. URL: {build_url}")
             return True
         else:
-            print(f"[Jenkins] Failed to trigger build: {response.text}")
+            print(f"[Jenkins Failure] Status: {response.status_code}, Job: {job_name}, Response: {response.text}")
             return False
 
     def get_build_status(self, job_name, build_number):

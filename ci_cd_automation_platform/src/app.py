@@ -182,179 +182,6 @@ def build_stage_list(pipeline):
 
 
 # --------------------------------------------------
-# Seed Demo Data
-# --------------------------------------------------
-
-def seed_demo_data():
-    """Populate the database with realistic sample pipeline data for dashboard demonstration."""
-    conn = get_db()
-    cursor = conn.cursor()
-
-    existing = cursor.execute("SELECT COUNT(*) FROM pipelines").fetchone()[0]
-    if existing > 0:
-        conn.close()
-        return
-
-    repos = ["ci_cd_automation_platform", "frontend-app", "api-gateway", "auth-service"]
-    branches = ["main", "develop", "feature/auth", "fix/login-bug", "release/v2.1"]
-    authors = ["Raj Parihar", "Alice Chen", "Bob Singh", "Carol Martinez"]
-    messages = [
-        "feat: add user authentication module",
-        "fix: resolve login timeout issue",
-        "chore: update dependencies",
-        "refactor: clean up API handlers",
-        "feat: implement pipeline metrics",
-        "fix: patch security vulnerability in auth",
-        "docs: update README with deployment steps",
-        "feat: add Docker health check",
-        "test: add integration tests for CI pipeline",
-        "fix: correct environment variable paths",
-    ]
-    statuses_pool = ["success", "success", "success", "success", "failed", "blocked", "running", "queued"]
-
-    now = datetime.utcnow()
-
-    for i in range(15):
-        pipeline_id = f"PL-{uuid.uuid4().hex[:8].upper()}"
-        repo = random.choice(repos)
-        branch = random.choice(branches)
-        author = random.choice(authors)
-        message = random.choice(messages)
-        status = statuses_pool[i % len(statuses_pool)]
-        created = now - timedelta(hours=random.randint(1, 72), minutes=random.randint(0, 59))
-
-        # Generate realistic stage timestamps
-        t = created
-        stage_data = {}
-        stage_keys = ["checkout", "install", "test", "metrics", "governance", "build", "deploy"]
-        durations = [3, 25, 40, 2, 5, 60, 15]  # typical seconds per stage
-
-        failed_at = None
-        if status == "failed":
-            failed_at = random.choice(["test", "build", "deploy"])
-        elif status == "blocked":
-            failed_at = "governance"
-
-        for idx, key in enumerate(stage_keys):
-            d = durations[idx] + random.randint(-2, 10)
-            if d < 1:
-                d = 1
-
-            if status == "queued":
-                stage_data[f"stage_{key}_status"] = "waiting"
-                continue
-
-            if status == "running" and idx >= 3:
-                if idx == 3:
-                    stage_data[f"stage_{key}_start"] = t.isoformat()
-                    stage_data[f"stage_{key}_status"] = "running"
-                else:
-                    stage_data[f"stage_{key}_status"] = "waiting"
-                continue
-
-            stage_data[f"stage_{key}_start"] = t.isoformat()
-            end = t + timedelta(seconds=d)
-            stage_data[f"stage_{key}_end"] = end.isoformat()
-
-            if failed_at == key:
-                stage_data[f"stage_{key}_status"] = "failed"
-                # Remaining stages stay waiting
-                for remaining_key in stage_keys[idx + 1:]:
-                    stage_data[f"stage_{remaining_key}_status"] = "waiting"
-                break
-            else:
-                stage_data[f"stage_{key}_status"] = "completed"
-
-            t = end + timedelta(seconds=random.randint(1, 3))
-
-        total_dur = calc_duration_seconds(
-            stage_data.get("stage_checkout_start", ""),
-            stage_data.get(f"stage_{stage_keys[-1]}_end", stage_data.get(f"stage_{failed_at}_end", "")) if failed_at else stage_data.get("stage_deploy_end", "")
-        )
-
-        # Test metrics
-        tp = random.randint(20, 50)
-        tf = random.randint(0, 3) if status in ("failed", "blocked") else 0
-        ts = random.randint(0, 5)
-
-        # Governance
-        gov_decision = "ALLOW"
-        gov_explanation = ""
-        if status == "blocked":
-            gov_decision = "BLOCK"
-            gov_explanation = f"Deployment blocked because {tf} of {tp + tf} tests failed during the testing stage."
-        elif status == "failed" and failed_at == "test":
-            gov_decision = "BLOCK"
-            gov_explanation = f"Deployment blocked because tests failed with {tf} failures."
-
-        # Failure info
-        failure_stage = None
-        failure_explanation = ""
-        failure_log = ""
-        if status == "failed":
-            failure_stage = failed_at
-            if failed_at == "test":
-                failure_explanation = "Testing stage failed because pytest returned exit code 1."
-                failure_log = "FAILED tests/test_auth.py::test_login - AssertionError: assert 200 == 401"
-            elif failed_at == "build":
-                failure_explanation = "Docker build failed due to missing dependency in requirements.txt."
-                failure_log = "ERROR: Could not find a version that satisfies the requirement nonexistent-pkg==1.0.0"
-            elif failed_at == "deploy":
-                failure_explanation = "Deployment failed because container health check did not pass within timeout."
-                failure_log = "ERROR: Container ci_cd_app exited with code 1 after 30s health check timeout."
-
-        cursor.execute("""
-            INSERT INTO pipelines (
-                pipeline_id, repository, branch, commit_id, commit_author, commit_message, status,
-                stage_checkout_start, stage_checkout_end, stage_checkout_status,
-                stage_install_start, stage_install_end, stage_install_status, stage_install_dep_count,
-                stage_test_start, stage_test_end, stage_test_status,
-                test_pass_count, test_fail_count, test_skip_count,
-                stage_metrics_start, stage_metrics_end, stage_metrics_status,
-                stage_governance_start, stage_governance_end, stage_governance_status,
-                stage_build_start, stage_build_end, stage_build_status, image_size,
-                stage_deploy_start, stage_deploy_end, stage_deploy_status, container_health,
-                total_pipeline_duration, governance_decision, governance_explanation,
-                failure_stage, failure_explanation, failure_log_snippet,
-                created_at, updated_at
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?
-            )
-        """, (
-            pipeline_id, repo, branch,
-            uuid.uuid4().hex[:12], author, message, status,
-            stage_data.get("stage_checkout_start"), stage_data.get("stage_checkout_end"), stage_data.get("stage_checkout_status", "waiting"),
-            stage_data.get("stage_install_start"), stage_data.get("stage_install_end"), stage_data.get("stage_install_status", "waiting"), random.randint(5, 20),
-            stage_data.get("stage_test_start"), stage_data.get("stage_test_end"), stage_data.get("stage_test_status", "waiting"),
-            tp, tf, ts,
-            stage_data.get("stage_metrics_start"), stage_data.get("stage_metrics_end"), stage_data.get("stage_metrics_status", "waiting"),
-            stage_data.get("stage_governance_start"), stage_data.get("stage_governance_end"), stage_data.get("stage_governance_status", "waiting"),
-            stage_data.get("stage_build_start"), stage_data.get("stage_build_end"), stage_data.get("stage_build_status", "waiting"),
-            f"{random.randint(80, 350)}MB",
-            stage_data.get("stage_deploy_start"), stage_data.get("stage_deploy_end"), stage_data.get("stage_deploy_status", "waiting"),
-            "healthy" if status == "success" else ("unhealthy" if status == "failed" and failed_at == "deploy" else ""),
-            total_dur, gov_decision, gov_explanation,
-            failure_stage, failure_explanation, failure_log,
-            created.isoformat(), (created + timedelta(seconds=total_dur)).isoformat() if total_dur else created.isoformat(),
-        ))
-
-    conn.commit()
-    conn.close()
-    print("[Seed] Inserted 15 demo pipeline records.")
-
-
-# --------------------------------------------------
 # Legacy Routes
 # --------------------------------------------------
 
@@ -369,34 +196,12 @@ def get_failure_recurrence(signature):
     return count
 
 
-@app.route("/simulate-build")
-def simulate_build():
-    collector = MetricsCollector()
-    collector.start_timer()
-    import time
-    time.sleep(2)
-    collector.stop_timer()
-    metrics = collector.collect_metrics()
-
-    simulate_failure = False
-    if simulate_failure:
-        test_status = "FAILED"
-        fake_log = """
-        ============================= test session starts =============================
-        FAILED tests/test_basic.py::test_example
-        E       assert 1 == 2
-        tests/test_basic.py:2: AssertionError
-        """
-        explanation = parse_pytest_failure(fake_log)
-    else:
-        test_status = "PASSED"
-        explanation = None
-
-    decision_data = evaluate_build(metrics, test_status)
-    report = ReportBuilder.build_report(metrics, decision_data, test_status)
-    report["ai_explanation"] = explanation
-    ReportBuilder.save_to_database(report)
-    return jsonify(report)
+# --------------------------------------------------
+# Legacy Routes (Disabled for Production)
+# --------------------------------------------------
+# @app.route("/simulate-build")
+# def simulate_build():
+#     ...
 
 
 @app.route("/api/evaluate", methods=["POST"])
@@ -436,15 +241,21 @@ def api_evaluate():
 # GitHub Webhook Endpoint
 # --------------------------------------------------
 
-@app.route("/webhook/github", methods=["POST"])
+@app.route("/webhook/github", methods=["POST"], strict_slashes=False)
 def github_webhook():
     event_type = request.headers.get("X-GitHub-Event")
     if not event_type:
+        print("[Webhook Error] Missing X-GitHub-Event header")
         return jsonify({"message": "Missing X-GitHub-Event header"}), 400
 
     payload = request.json
     parsed_data = parse_webhook_payload(payload, event_type)
-    print(f"Received GitHub {event_type} event: {parsed_data}")
+    
+    repo = parsed_data.get("repository", "unknown")
+    branch = parsed_data.get("branch", "unknown")
+    commit = parsed_data.get("commit_id", "none")[:8]
+    
+    print(f"[Webhook] Received GitHub {event_type} event for {repo} ({branch}) @ {commit}")
 
     # Create a new pipeline record
     pipeline_id = f"PL-{uuid.uuid4().hex[:8].upper()}"
@@ -470,17 +281,29 @@ def github_webhook():
     jenkins_user = os.getenv("JENKINS_USER", "admin")
     jenkins_token = os.getenv("JENKINS_TOKEN", "114d154f42f2e6dd30a9db042b6fd36c98")
     job_name = os.getenv("JENKINS_JOB_NAME", "CI-CD-Intelligence-Test")
-    client = JenkinsClient(jenkins_url, jenkins_user, jenkins_token)
-    params = None
-    if parsed_data.get("commit_id"):
-        params = {
-            "COMMIT_ID": parsed_data["commit_id"],
-            "BRANCH": parsed_data.get("branch", ""),
-            "PIPELINE_ID": pipeline_id
-        }
-    client.trigger_build(job_name, params=params)
 
-    return jsonify({"message": "Webhook processed, Jenkins build triggered.", "pipeline_id": pipeline_id, "data": parsed_data})
+    print(f"[Jenkins] Triggering build for '{job_name}' on {jenkins_url}")
+    client = JenkinsClient(jenkins_url, jenkins_user, jenkins_token)
+    
+    params = {
+        "COMMIT_ID": parsed_data.get("commit_id", ""),
+        "BRANCH": parsed_data.get("branch", ""),
+        "PIPELINE_ID": pipeline_id,
+        "REPO_NAME": parsed_data.get("repository", "")
+    }
+    
+    success = client.trigger_build(job_name, params=params)
+    if success:
+        print(f"[Jenkins] Build triggered successfully for {pipeline_id}")
+    else:
+        print(f"[Jenkins Error] Failed to trigger build for {pipeline_id}")
+
+    return jsonify({
+        "message": "Webhook processed, Jenkins build triggered." if success else "Webhook processed, but Jenkins trigger failed.", 
+        "pipeline_id": pipeline_id, 
+        "success": success,
+        "data": parsed_data
+    })
 
 
 # --------------------------------------------------
@@ -565,18 +388,59 @@ def pipeline_report():
 
 @app.route("/api/pipelines/active")
 def pipelines_active():
-    service = JenkinsService()
-    pipelines = service.sync_pipelines()
-    active = [p for p in pipelines if p['status'] in ('queued', 'running')]
-    return jsonify(active)
+    """Syncs with Jenkins and returns active pipelines from DB."""
+    conn = get_db()
+    
+    # Sync latest from Jenkins to DB first
+    try:
+        service = JenkinsService()
+        service.sync_pipelines(db_conn=conn)
+    except Exception as e:
+        print(f"[Jenkins Sync Error] {e}")
+
+    rows = conn.execute("SELECT * FROM pipelines WHERE status IN ('queued', 'running', 'blocked') ORDER BY created_at DESC").fetchall()
+    conn.close()
+    
+    pipelines = rows_to_list(rows)
+    for p in pipelines:
+        p["stages"] = build_stage_list(p)
+        
+    return jsonify(pipelines)
 
 
 @app.route("/api/pipelines/history")
 def pipelines_history():
-    service = JenkinsService()
-    pipelines = service.sync_pipelines()
-    history = [p for p in pipelines if p['status'] not in ('queued', 'running')]
-    return jsonify(history)
+    """Returns historical pipelines from the local database."""
+    conn = get_db()
+    
+    # Filter by search/status/repo if present in query params
+    search = request.args.get("search")
+    status = request.args.get("status")
+    repo = request.args.get("repo")
+    
+    query = "SELECT * FROM pipelines WHERE status NOT IN ('queued', 'running', 'blocked')"
+    params = []
+    
+    if search:
+        query += " AND (pipeline_id LIKE ? OR commit_message LIKE ? OR commit_author LIKE ?)"
+        params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    if repo:
+        query += " AND repository = ?"
+        params.append(repo)
+        
+    query += " ORDER BY created_at DESC LIMIT 50"
+    
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    
+    pipelines = rows_to_list(rows)
+    for p in pipelines:
+        p["stages"] = build_stage_list(p)
+        
+    return jsonify(pipelines)
 
 
 @app.route("/api/pipelines/metrics")
