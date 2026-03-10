@@ -6,7 +6,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "ci_cd_automation_platform"
         DOCKER_TAG   = "${env.BUILD_ID}"
-        PLATFORM_DIR = "."
+        PLATFORM_DIR = "ci_cd_automation_platform"
         PLATFORM_API = "https://jerold-nonimpressionistic-glynis.ngrok-free.dev" // Update this for ngrok exposure!
         PIPELINE_ID  = "PL-${env.BUILD_ID}"
     }
