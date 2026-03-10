@@ -46,3 +46,20 @@ class JenkinsClient:
         if response.status_code == 200:
             return response.text
         return None
+
+    def get_build_list(self, job_name):
+        """Fetch the list of latest builds for a specific job."""
+        api_url = f"{self.url}/job/{job_name}/api/json?tree=builds[number,url,result,timestamp,duration,building]"
+        response = requests.get(api_url, auth=self.auth)
+        if response.status_code == 200:
+            return response.json().get("builds", [])
+        return []
+
+    def get_pipeline_wf_api(self, job_name, build_number):
+        """Fetch detailed pipeline stage information using the Workflow API."""
+        # This requires the 'Pipeline: Stage View' plugin
+        api_url = f"{self.url}/job/{job_name}/{build_number}/wfapi/describe"
+        response = requests.get(api_url, auth=self.auth)
+        if response.status_code == 200:
+            return response.json()
+        return None

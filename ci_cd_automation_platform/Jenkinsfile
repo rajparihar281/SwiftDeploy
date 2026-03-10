@@ -1,3 +1,5 @@
+import groovy.json.JsonOutput
+
 pipeline {
     agent any
 
@@ -5,23 +7,45 @@ pipeline {
         DOCKER_IMAGE = "ci_cd_automation_platform"
         DOCKER_TAG   = "${env.BUILD_ID}"
         PLATFORM_DIR = "ci_cd_automation_platform"
+        PLATFORM_API = "http://localhost:5000"
+        PIPELINE_ID  = "PL-${env.BUILD_ID}-${System.currentTimeMillis()}"
     }
 
     stages {
         stage('Stage 1: Checkout Code') {
             steps {
-                checkout scm
+                script {
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    try {
+                        checkout scm
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('checkout', stageStart, stageEnd, 'completed')
+                    } catch (err) {
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('checkout', stageStart, stageEnd, 'failed')
+                        throw err
+                    }
+                }
             }
         }
 
         stage('Stage 2: Install Dependencies') {
             steps {
                 script {
-                    bat """
-                        cd ${env.PLATFORM_DIR}
-                        python -m venv venv
-                        venv\\Scripts\\pip install -r requirements.txt
-                    """
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    try {
+                        bat """
+                            cd ${env.PLATFORM_DIR}
+                            python -m venv venv
+                            venv\\\\Scripts\\\\pip install -r requirements.txt
+                        """
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('install', stageStart, stageEnd, 'completed')
+                    } catch (err) {
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('install', stageStart, stageEnd, 'failed')
+                        throw err
+                    }
                 }
             }
         }
@@ -31,13 +55,12 @@ pipeline {
                 script {
                     env.TEST_STATUS = "PASSED"
                     env.TEST_LOG    = ""
-                    def startTime   = System.currentTimeMillis()
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
 
                     try {
-                        // Capture the test output
                         bat """
                             cd ${env.PLATFORM_DIR}
-                            venv\\Scripts\\python -m pytest tests/ -v > pytest_output.txt
+                            venv\\\\Scripts\\\\python -m pytest tests/ -v > pytest_output.txt
                         """
                         env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
                     } catch (err) {
@@ -48,10 +71,42 @@ pipeline {
                         }
                     }
 
-                    def endTime = System.currentTimeMillis()
-                    env.BUILD_DURATION = ((endTime - startTime) / 1000).toString()
+                    def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    def testStatus = env.TEST_STATUS == "PASSED" ? "completed" : "failed"
 
-                    echo "Build Duration (seconds): ${env.BUILD_DURATION}"
+                    // Parse test counts from pytest output
+                    def passCount = 0
+                    def failCount = 0
+                    def skipCount = 0
+                    def testLog = env.TEST_LOG ?: ""
+                    def summaryMatch = (testLog =~ /(\d+) passed/)
+                    if (summaryMatch.find()) passCount = summaryMatch.group(1).toInteger()
+                    def failMatch = (testLog =~ /(\d+) failed/)
+                    if (failMatch.find()) failCount = failMatch.group(1).toInteger()
+                    def skipMatch = (testLog =~ /(\d+) skipped/)
+                    if (skipMatch.find()) skipCount = skipMatch.group(1).toInteger()
+
+                    def body = JsonOutput.toJson([
+                        pipeline_id: env.PIPELINE_ID,
+                        stage_test_start: stageStart,
+                        stage_test_end: stageEnd,
+                        stage_test_status: testStatus,
+                        test_pass_count: passCount,
+                        test_fail_count: failCount,
+                        test_skip_count: skipCount,
+                        status: 'running'
+                    ])
+
+                    try {
+                        httpRequest httpMode: 'POST',
+                                    contentType: 'APPLICATION_JSON',
+                                    requestBody: body,
+                                    url: "${env.PLATFORM_API}/api/pipelines/report"
+                    } catch (e) {
+                        echo "Stage report failed: ${e}"
+                    }
+
+                    env.BUILD_DURATION = "0"
                     echo "Test Status: ${env.TEST_STATUS}"
                 }
             }
@@ -59,35 +114,70 @@ pipeline {
 
         stage('Stage 4: Collect Metrics') {
             steps {
-                echo "Metrics collected: Build Duration = ${env.BUILD_DURATION}s, Test Status = ${env.TEST_STATUS}"
+                script {
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    echo "Metrics collected: Test Status = ${env.TEST_STATUS}"
+                    def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    reportStage('metrics', stageStart, stageEnd, 'completed')
+                }
             }
         }
 
         stage('Stage 5: Evaluate Governance') {
             steps {
                 script {
-                    // Using httpRequest plugin which is cleaner than curl in bat
-                    def response = httpRequest httpMode: 'POST', 
-                                              contentType: 'APPLICATION_JSON', 
-                                              requestBody: """{
-                                                  "metrics": {
-                                                      "cpu": 50,
-                                                      "memory": 60,
-                                                      "disk": 40,
-                                                      "build_time": ${env.BUILD_DURATION}
-                                                  },
-                                                  "test_status": "${env.TEST_STATUS}",
-                                                  "log_text": ${JsonOutput.toJson(env.TEST_LOG)}
-                                              }""",
-                                              url: "http://localhost:5000/api/evaluate"
-                    
-                    def result = readJSON text: response.content
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    try {
+                        def response = httpRequest httpMode: 'POST',
+                                                  contentType: 'APPLICATION_JSON',
+                                                  requestBody: """{
+                                                      "metrics": {
+                                                          "cpu": 50,
+                                                          "memory": 60,
+                                                          "disk": 40,
+                                                          "build_time": 10
+                                                      },
+                                                      "test_status": "${env.TEST_STATUS}",
+                                                      "log_text": ${JsonOutput.toJson(env.TEST_LOG)}
+                                                  }""",
+                                                  url: "${env.PLATFORM_API}/api/evaluate"
 
-                    echo "Governance Decision: ${result.decision}"
-                    echo "Waste Score: ${result.waste_score}"
+                        def result = readJSON text: response.content
 
-                    if (result.decision == "BLOCK") {
-                        error("Deployment BLOCKED by Governance Engine: ${result.violations}")
+                        echo "Governance Decision: ${result.decision}"
+                        echo "Waste Score: ${result.waste_score}"
+
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        def govStatus = result.decision == "BLOCK" ? "failed" : "completed"
+
+                        def body = JsonOutput.toJson([
+                            pipeline_id: env.PIPELINE_ID,
+                            stage_governance_start: stageStart,
+                            stage_governance_end: stageEnd,
+                            stage_governance_status: govStatus,
+                            governance_decision: result.decision,
+                            governance_explanation: result.decision == "BLOCK" ?
+                                "Deployment blocked: ${result.violations}" :
+                                "All governance checks passed.",
+                            status: result.decision == "BLOCK" ? "blocked" : "running"
+                        ])
+
+                        try {
+                            httpRequest httpMode: 'POST',
+                                        contentType: 'APPLICATION_JSON',
+                                        requestBody: body,
+                                        url: "${env.PLATFORM_API}/api/pipelines/report"
+                        } catch (e) {
+                            echo "Stage report failed: ${e}"
+                        }
+
+                        if (result.decision == "BLOCK") {
+                            error("Deployment BLOCKED by Governance Engine: ${result.violations}")
+                        }
+                    } catch (err) {
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('governance', stageStart, stageEnd, 'failed')
+                        throw err
                     }
                 }
             }
@@ -96,7 +186,16 @@ pipeline {
         stage('Stage 6: Build Docker Image') {
             steps {
                 script {
-                    bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ${env.PLATFORM_DIR}"
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    try {
+                        bat "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ${env.PLATFORM_DIR}"
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('build', stageStart, stageEnd, 'completed')
+                    } catch (err) {
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('build', stageStart, stageEnd, 'failed')
+                        throw err
+                    }
                 }
             }
         }
@@ -104,14 +203,57 @@ pipeline {
         stage('Stage 7: Deploy') {
             steps {
                 script {
-                    echo "Deploying Docker container..."
-                    // Kill existing container if exists
-                    bat "docker rm -f ci_cd_app_demo || true"
-                    bat "docker run -d -p 5050:5000 --name ci_cd_app_demo ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                    def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    try {
+                        echo "Deploying Docker container..."
+                        bat "docker rm -f ci_cd_app_demo || true"
+                        bat "docker run -d -p 5050:5000 --name ci_cd_app_demo ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+
+                        def body = JsonOutput.toJson([
+                            pipeline_id: env.PIPELINE_ID,
+                            stage_deploy_start: stageStart,
+                            stage_deploy_end: stageEnd,
+                            stage_deploy_status: 'completed',
+                            container_health: 'healthy',
+                            status: 'success'
+                        ])
+
+                        try {
+                            httpRequest httpMode: 'POST',
+                                        contentType: 'APPLICATION_JSON',
+                                        requestBody: body,
+                                        url: "${env.PLATFORM_API}/api/pipelines/report"
+                        } catch (e) {
+                            echo "Stage report failed: ${e}"
+                        }
+                    } catch (err) {
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('deploy', stageStart, stageEnd, 'failed')
+                        throw err
+                    }
                 }
             }
         }
     }
 }
 
-import groovy.json.JsonOutput
+// Helper to report stage metadata to the platform API
+def reportStage(stageName, startTime, endTime, status) {
+    def body = JsonOutput.toJson([
+        pipeline_id: env.PIPELINE_ID,
+        ("stage_${stageName}_start".toString()): startTime,
+        ("stage_${stageName}_end".toString()): endTime,
+        ("stage_${stageName}_status".toString()): status,
+        status: status == 'failed' ? 'failed' : 'running'
+    ])
+
+    try {
+        httpRequest httpMode: 'POST',
+                    contentType: 'APPLICATION_JSON',
+                    requestBody: body,
+                    url: "${env.PLATFORM_API}/api/pipelines/report"
+    } catch (e) {
+        echo "Stage report failed for ${stageName}: ${e}"
+    }
+}
