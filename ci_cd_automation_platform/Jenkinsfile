@@ -3,11 +3,15 @@ import groovy.json.JsonOutput
 pipeline {
     agent any
 
+    parameters {
+        string(name: 'PROJECT_DIR', defaultValue: '.', description: 'Directory of the project to build/test (e.g. projects/allowed)')
+    }
+
     environment {
         DOCKER_IMAGE = "ci_cd_automation_platform"
         DOCKER_TAG   = "${env.BUILD_ID}"
         PLATFORM_DIR = "ci_cd_automation_platform"
-        PLATFORM_API = "https://jerold-nonimpressionistic-glynis.ngrok-free.dev" // Update this for ngrok exposure!
+        PLATFORM_API = "https://jerold-nonimpressionistic-glynis.ngrok-free.dev"
         PIPELINE_ID  = "PL-${env.BUILD_ID}"
     }
 
@@ -76,7 +80,7 @@ pipeline {
                     try {
                         bat """
                             cd ${env.PLATFORM_DIR}
-                            venv\\\\Scripts\\\\python -m pytest tests/ -v > pytest_output.txt
+                            venv\\\\Scripts\\\\python -m pytest ${params.PROJECT_DIR}/tests/ -v > pytest_output.txt
                         """
                         env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
                     } catch (err) {
