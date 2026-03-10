@@ -10,13 +10,11 @@ class JenkinsClient:
         self.auth = (self.user, self.token) if self.user and self.token else None
 
     def trigger_build(self, job_name, params=None):
-        """Trigger a Jenkins build with optional parameters."""
+        """Trigger a plain Jenkins build (No parameters required)."""
         build_url = f"{self.url}/job/{job_name}/build"
-        if params:
-            build_url = f"{self.url}/job/{job_name}/buildWithParameters"
-            response = requests.post(build_url, auth=self.auth, data=params)
-        else:
-            response = requests.post(build_url, auth=self.auth)
+        
+        # We ignore params to satisfy the 'direct build' requirement
+        response = requests.post(build_url, auth=self.auth)
         
         if response.status_code in [200, 201]:
             print(f"[Jenkins Success] Triggered build for {job_name} successfully. URL: {build_url}")

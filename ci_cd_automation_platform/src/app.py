@@ -258,7 +258,8 @@ def github_webhook():
     print(f"[Webhook] Received GitHub {event_type} event for {repo} ({branch}) @ {commit}")
 
     # Create a new pipeline record
-    pipeline_id = f"PL-{uuid.uuid4().hex[:8].upper()}"
+    # Since we can't pass the ID to Jenkins anymore, we'll prefix it so we know it was webhook-triggered
+    pipeline_id = f"WEBHOOK-{uuid.uuid4().hex[:6].upper()}"
     conn = get_db()
     conn.execute("""
         INSERT INTO pipelines (pipeline_id, repository, branch, commit_id, commit_author, commit_message, status, created_at, updated_at)
@@ -521,6 +522,5 @@ def home():
 # --------------------------------------------------
 
 if __name__ == "__main__":
-    init_db()
-    # seed_demo_data() # Disabled for real integration
+    init_db()   
     app.run(debug=True)
