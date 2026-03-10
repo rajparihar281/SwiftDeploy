@@ -86,12 +86,8 @@ pipeline {
                             env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
                         }
                     }
-
-                    // Parse test counts safely using NonCPS helper
-                    def counts = parsePytestOutput(env.TEST_LOG)
-                    def passCount = counts.pass
-                    def failCount = counts.fail
-                    def skipCount = counts.skip
+                    def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                    def testStatus = env.TEST_STATUS == "PASSED" ? "completed" : "failed"
 
                     def body = JsonOutput.toJson([
                         pipeline_id: env.PIPELINE_ID,

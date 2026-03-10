@@ -52,6 +52,22 @@ class JenkinsService:
                         pipeline_id
                     ))
                 else:
+                    # Check if there's a queued webhook record for this commit before creating a new one
+                    import requests
+                    commit_info = requests.get(f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1]]", auth=self.client.auth).json()
+                    sha = None
+                    for action in commit_info.get("actions", []):
+                        if action.get("lastBuiltRevision"):
+                            sha = action["lastBuiltRevision"].get("SHA1")
+                    
+                    if sha:
+                        webhook_record = db_conn.execute("SELECT id FROM pipelines WHERE commit_id = ? AND status = 'queued'", (sha,)).fetchone()
+                        if webhook_record:
+                            # Link it now instead of creating duplicate
+                            db_conn.execute("UPDATE pipelines SET pipeline_id = ?, status = ? WHERE id = ?", (pipeline_id, status, webhook_record[0]))
+                            db_conn.commit()
+                            continue
+
                     # Create new record for untracked (e.g. manual) build
                     db_conn.execute("""
                         INSERT INTO pipelines (pipeline_id, repository, branch, status, created_at, updated_at)

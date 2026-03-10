@@ -328,17 +328,26 @@ def pipeline_report():
         existing = conn.execute("SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
 
         if not existing and data.get("commit_id"):
-            # Try to correlate by commit_id if this was a webhook-triggered build waiting in 'queued' state
-            print(f"[Correlation] Attempting to link Jenkins ID {pipeline_id} to webhook record using commit {data.get('commit_id')}")
-            conn.execute(
-                "UPDATE pipelines SET pipeline_id = ?, status = ? WHERE commit_id = ? AND status = 'queued'",
-                (pipeline_id, data.get("status", "running"), data.get("commit_id"))
-            )
+            # Try to correlate by commit_id targeting the most RECENT 'queued' record for this commit
+            print(f"[Correlation] Linking Jenkins {pipeline_id} to webhook record for commit {data.get('commit_id')[:8]}")
+            
+            conn.execute("""
+                UPDATE pipelines SET pipeline_id = ?, status = ? 
+                WHERE id = (
+                    SELECT id FROM pipelines 
+                    WHERE commit_id = ? AND status = 'queued' 
+                    ORDER BY created_at DESC LIMIT 1
+                )
+            """, (pipeline_id, data.get("status", "running"), data.get("commit_id")))
+            
             existing = conn.execute("SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
             if existing:
-                print(f"[Correlation] Success! Jenkins {pipeline_id} linked to existing webhook record.")
+                print(f"[Correlation] Successfully linked {pipeline_id} to existing webhook record.")
+                
+                # Cleanup: Delete any other 'queued' records for this same commit/branch to prevent clutter
+                conn.execute("DELETE FROM pipelines WHERE commit_id = ? AND status = 'queued'", (data.get("commit_id"),))
             else:
-                print(f"[Correlation] No matching queued record found for commit {data.get('commit_id')}")
+                print(f"[Correlation] No matching queued record found for commit {data.get('commit_id')[:8]}")
 
         if not existing:
             # Create new pipeline if still not found
