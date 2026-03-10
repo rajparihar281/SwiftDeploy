@@ -6,6 +6,7 @@ import uuid
 import random
 from datetime import datetime, timedelta, timezone
 from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 import io
 
 import sys
@@ -569,14 +570,14 @@ def download_pdf_report(pipeline_db_id):
     
     # Header
     pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(0, 10, "SwiftDeploy - CI/CD Pipeline Report", ln=True, align='C')
+    pdf.cell(0, 10, "SwiftDeploy - CI/CD Pipeline Report", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.set_font("Helvetica", '', 10)
-    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
     pdf.ln(10)
     
     # Summary Table
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, "1. Build Metadata", ln=True)
+    pdf.cell(0, 10, "1. Build Metadata", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", '', 10)
     
     data_summary = [
@@ -591,42 +592,42 @@ def download_pdf_report(pipeline_db_id):
     
     for row_data in data_summary:
         pdf.cell(50, 8, row_data[0], border=1)
-        pdf.cell(0, 8, str(row_data[1]), border=1, ln=True)
+        pdf.cell(0, 8, str(row_data[1]), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     pdf.ln(10)
     
     # Stage Timeline
     pdf.set_font("Helvetica", 'B', 12)
-    pdf.cell(0, 10, "2. Stage Timeline", ln=True)
+    pdf.cell(0, 10, "2. Stage Timeline", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font("Helvetica", 'B', 10)
     pdf.cell(60, 8, "Stage", border=1)
     pdf.cell(40, 8, "Duration (s)", border=1)
-    pdf.cell(0, 8, "Status", border=1, ln=True)
+    pdf.cell(0, 8, "Status", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     pdf.set_font("Helvetica", '', 10)
     for s in stages:
         pdf.cell(60, 8, s["name"], border=1)
         pdf.cell(40, 8, f"{s['duration']}s", border=1)
-        pdf.cell(0, 8, (s["status"] or "waiting").upper(), border=1, ln=True)
+        pdf.cell(0, 8, (s["status"] or "waiting").upper(), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
     pdf.ln(10)
     
     # Governance & Failures
     if p["governance_decision"] or p["failure_stage"]:
         pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, "3. Analysis & Governance", ln=True)
+        pdf.cell(0, 10, "3. Analysis & Governance", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.set_font("Helvetica", '', 10)
         
         if p["governance_decision"]:
-            pdf.multi_cell(0, 8, f"Governance Decision: {p['governance_decision']}", border=1)
-            pdf.multi_cell(0, 8, f"Explanation: {p['governance_explanation'] or 'N/A'}", border=1)
+            pdf.multi_cell(0, 8, f"Governance Decision: {p['governance_decision']}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.multi_cell(0, 8, f"Explanation: {p['governance_explanation'] or 'N/A'}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.ln(5)
             
         if p["failure_stage"]:
             pdf.set_text_color(200, 0, 0)
-            pdf.multi_cell(0, 8, f"FAILURE at {p['failure_stage']} stage", border=1)
+            pdf.multi_cell(0, 8, f"FAILURE at {p['failure_stage']} stage", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
             pdf.set_text_color(0, 0, 0)
-            pdf.multi_cell(0, 8, f"Reason: {p['failure_explanation'] or 'N/A'}", border=1)
+            pdf.multi_cell(0, 8, f"Reason: {p['failure_explanation'] or 'N/A'}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
     # Send Binary
     buffer = io.BytesIO()
