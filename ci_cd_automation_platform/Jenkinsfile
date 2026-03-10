@@ -17,12 +17,25 @@ pipeline {
                 script {
                     def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                     try {
-                        // Priority 1: Real SCM Checkout if repository is configured
-                        // Priority 2: Fallback to local checkout if triggered manually
-                        checkout scm
-                        
+                        def scmVars = checkout scm
+                        env.GIT_COMMIT = scmVars.GIT_COMMIT
+                        env.GIT_BRANCH = scmVars.GIT_BRANCH
+                        env.GIT_URL = scmVars.GIT_URL
+
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
-                        reportStage('checkout', stageStart, stageEnd, 'completed')
+                        
+                        // First report includes metadata for correlation
+                        def body = JsonOutput.toJson([
+                            pipeline_id: env.PIPELINE_ID,
+                            stage_checkout_start: stageStart,
+                            stage_checkout_end: stageEnd,
+                            stage_checkout_status: 'completed',
+                            commit_id: env.GIT_COMMIT,
+                            branch: env.GIT_BRANCH,
+                            repository: env.GIT_URL,
+                            status: 'running'
+                        ])
+                        sendReport(body)
                     } catch (err) {
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         reportStage('checkout', stageStart, stageEnd, 'failed')
@@ -74,20 +87,11 @@ pipeline {
                         }
                     }
 
-                    def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
-                    def testStatus = env.TEST_STATUS == "PASSED" ? "completed" : "failed"
-
-                    // Parse test counts from pytest output
-                    def passCount = 0
-                    def failCount = 0
-                    def skipCount = 0
-                    def testLog = env.TEST_LOG ?: ""
-                    def summaryMatch = (testLog =~ /(\d+) passed/)
-                    if (summaryMatch.find()) passCount = summaryMatch.group(1).toInteger()
-                    def failMatch = (testLog =~ /(\d+) failed/)
-                    if (failMatch.find()) failCount = failMatch.group(1).toInteger()
-                    def skipMatch = (testLog =~ /(\d+) skipped/)
-                    if (skipMatch.find()) skipCount = skipMatch.group(1).toInteger()
+                    // Parse test counts safely using NonCPS helper
+                    def counts = parsePytestOutput(env.TEST_LOG)
+                    def passCount = counts.pass
+                    def failCount = counts.fail
+                    def skipCount = counts.skip
 
                     def body = JsonOutput.toJson([
                         pipeline_id: env.PIPELINE_ID,
@@ -97,17 +101,11 @@ pipeline {
                         test_pass_count: passCount,
                         test_fail_count: failCount,
                         test_skip_count: skipCount,
+                        commit_id: env.GIT_COMMIT,
                         status: 'running'
                     ])
 
-                    try {
-                        httpRequest httpMode: 'POST',
-                                    contentType: 'APPLICATION_JSON',
-                                    requestBody: body,
-                                    url: "${env.PLATFORM_API}/api/pipelines/report"
-                    } catch (e) {
-                        echo "Stage report failed: ${e}"
-                    }
+                    sendReport(body)
 
                     env.BUILD_DURATION = "0"
                     echo "Test Status: ${env.TEST_STATUS}"
@@ -162,17 +160,11 @@ pipeline {
                             governance_explanation: result.decision == "BLOCK" ?
                                 "Deployment blocked: ${result.violations}" :
                                 "All governance checks passed.",
+                            commit_id: env.GIT_COMMIT, // Include for correlation
                             status: result.decision == "BLOCK" ? "blocked" : "running"
                         ])
 
-                        try {
-                            httpRequest httpMode: 'POST',
-                                        contentType: 'APPLICATION_JSON',
-                                        requestBody: body,
-                                        url: "${env.PLATFORM_API}/api/pipelines/report"
-                        } catch (e) {
-                            echo "Stage report failed: ${e}"
-                        }
+                        sendReport(body)
 
                         if (result.decision == "BLOCK") {
                             error("Deployment BLOCKED by Governance Engine: ${result.violations}")
@@ -219,17 +211,11 @@ pipeline {
                             stage_deploy_end: stageEnd,
                             stage_deploy_status: 'completed',
                             container_health: 'healthy',
+                            commit_id: env.GIT_COMMIT, // Include for correlation
                             status: 'success'
                         ])
 
-                        try {
-                            httpRequest httpMode: 'POST',
-                                        contentType: 'APPLICATION_JSON',
-                                        requestBody: body,
-                                        url: "${env.PLATFORM_API}/api/pipelines/report"
-                        } catch (e) {
-                            echo "Stage report failed: ${e}"
-                        }
+                        sendReport(body)
                     } catch (err) {
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         reportStage('deploy', stageStart, stageEnd, 'failed')
@@ -248,15 +234,41 @@ def reportStage(stageName, startTime, endTime, status) {
         ("stage_${stageName}_start".toString()): startTime,
         ("stage_${stageName}_end".toString()): endTime,
         ("stage_${stageName}_status".toString()): status,
+        commit_id: env.GIT_COMMIT,
+        repository: env.GIT_URL,
+        branch: env.GIT_BRANCH,
         status: status == 'failed' ? 'failed' : 'running'
     ])
+    sendReport(body)
+}
 
+@NonCPS
+def parsePytestOutput(log) {
+    def counts = [pass:0, fail:0, skip:0]
+    if (!log) return counts
+    
+    // Check for 'passed'
+    def pMatch = (log =~ /(\d+) passed/)
+    if (pMatch.find()) counts.pass = pMatch.group(1).toInteger()
+    
+    // Check for 'failed'
+    def fMatch = (log =~ /(\d+) failed/)
+    if (fMatch.find()) counts.fail = fMatch.group(1).toInteger()
+    
+    // Check for 'skipped'
+    def sMatch = (log =~ /(\d+) skipped/)
+    if (sMatch.find()) counts.skip = sMatch.group(1).toInteger()
+    
+    return counts
+}
+
+def sendReport(body) {
     try {
         httpRequest httpMode: 'POST',
                     contentType: 'APPLICATION_JSON',
                     requestBody: body,
                     url: "${env.PLATFORM_API}/api/pipelines/report"
     } catch (e) {
-        echo "Stage report failed for ${stageName}: ${e}"
+        echo "API report failed: ${e}"
     }
 }

@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from integrations.jenkins.client import JenkinsClient
 
 class JenkinsService:
@@ -30,7 +30,7 @@ class JenkinsService:
                     for p in action.get("parameters", []):
                         params[p.get("name")] = p.get("value")
             
-            pipeline_id = params.get("PIPELINE_ID") or f"JNK-{build_num}"
+            pipeline_id = params.get("PIPELINE_ID") or f"PL-{build_num}"
             status = self._map_status(build)
             
             if db_conn:
@@ -48,7 +48,7 @@ class JenkinsService:
                     """, (
                         status, 
                         build.get("duration", 0) / 1000.0,
-                        datetime.utcnow().isoformat(),
+                        datetime.now(timezone.utc).isoformat(),
                         pipeline_id
                     ))
                 else:
@@ -62,7 +62,7 @@ class JenkinsService:
                         params.get("BRANCH", "main"),
                         status,
                         self._format_ts(build.get("timestamp")),
-                        datetime.utcnow().isoformat()
+                        datetime.now(timezone.utc).isoformat()
                     ))
                 db_conn.commit()
 
@@ -80,8 +80,8 @@ class JenkinsService:
 
     def _format_ts(self, ts_ms):
         if not ts_ms:
-            return datetime.utcnow().isoformat()
-        return datetime.fromtimestamp(ts_ms / 1000.0).isoformat()
+            return datetime.now(timezone.utc).isoformat()
+        return datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).isoformat()
 
     def _map_stages(self, wf_data):
         stages = []

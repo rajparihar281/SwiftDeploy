@@ -1,155 +1,322 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Build Details — {{ pipeline.pipeline_id }} — SwiftDeploy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
-        .details-container { max-width: 1000px; margin: 0 auto; padding: 32px 20px; }
-        .back-link { margin-bottom: 24px; display: inline-block; color: var(--text-muted); text-decoration: none; font-size: 14px; }
-        .back-link:hover { color: var(--accent-blue); }
-        .details-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
-        .details-title-wrap { flex: 1; }
-        .details-id { font-family: var(--font-mono); color: var(--accent-blue); font-size: 24px; font-weight: 700; margin-bottom: 4px; }
-        .details-meta { color: var(--text-muted); font-size: 14px; }
-        .details-actions { display: flex; gap: 12px; }
-        .btn-download { background: var(--accent-blue); color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; }
-        .btn-download:hover { background: #2563eb; }
-        
-        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 32px; }
-        .info-card { background: var(--bg-card); border: 1px solid var(--border-color); padding: 16px; border-radius: 10px; }
-        .info-label { color: var(--text-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-        .info-value { font-weight: 600; font-size: 16px; word-break: break-all; }
+        .details-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 32px 20px;
+        }
 
-        .stage-table { width: 100%; border-collapse: collapse; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; overflow: hidden; margin-bottom: 32px; }
-        .stage-table th { text-align: left; padding: 12px 16px; background: rgba(255,255,255,0.03); color: var(--text-muted); font-weight: 600; font-size: 13px; border-bottom: 1px solid var(--border-color); }
-        .stage-table td { padding: 16px; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
-        .stage-table tr:last-child td { border-bottom: none; }
-        
-        .stage-name-cell { display: flex; align-items: center; gap: 12px; font-weight: 600; }
-        .stage-dot { width: 10px; height: 10px; border-radius: 50%; }
-        .dot-completed { background: var(--status-success); box-shadow: 0 0 8px var(--status-success); }
-        .dot-failed { background: var(--status-failure); box-shadow: 0 0 8px var(--status-failure); }
-        .dot-running { background: var(--status-running); box-shadow: 0 0 8px var(--status-running); animation: pulse 2s infinite; }
-        .dot-waiting { background: #475569; }
+        .back-link {
+            margin-bottom: 24px;
+            display: inline-block;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 14px;
+        }
 
-        .explanation-section { margin-top: 32px; }
-        .explanation-card { padding: 20px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 20px; }
-        .card-success { background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2); }
-        .card-failure { background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.2); }
-        .card-title { font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .back-link:hover {
+            color: var(--accent-blue);
+        }
 
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        .details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 32px;
+        }
+
+        .details-title-wrap {
+            flex: 1;
+        }
+
+        .details-id {
+            font-family: var(--font-mono);
+            color: var(--accent-blue);
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .details-meta {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .details-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-download {
+            background: var(--accent-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-download:hover {
+            background: #2563eb;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .info-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            padding: 16px;
+            border-radius: 10px;
+        }
+
+        .info-label {
+            color: var(--text-muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-weight: 600;
+            font-size: 16px;
+            word-break: break-all;
+        }
+
+        .stage-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 32px;
+        }
+
+        .stage-table th {
+            text-align: left;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stage-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .stage-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .stage-name-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .stage-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot-completed {
+            background: var(--status-success);
+            box-shadow: 0 0 8px var(--status-success);
+        }
+
+        .dot-failed {
+            background: var(--status-failure);
+            box-shadow: 0 0 8px var(--status-failure);
+        }
+
+        .dot-running {
+            background: var(--status-running);
+            box-shadow: 0 0 8px var(--status-running);
+            animation: pulse 2s infinite;
+        }
+
+        .dot-waiting {
+            background: #475569;
+        }
+
+        .explanation-section {
+            margin-top: 32px;
+        }
+
+        .explanation-card {
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .card-success {
+            background: rgba(16, 185, 129, 0.05);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .card-failure {
+            background: rgba(239, 68, 68, 0.05);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .card-title {
+            font-weight: 700;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
     </style>
 </head>
+
 <body>
 
-<nav class="top-nav">
-    <div class="nav-brand">
-        <div class="nav-brand-icon">⚡</div>
-        <span class="nav-brand-text">SwiftDeploy Console</span>
-    </div>
-</nav>
+    <nav class="top-nav">
+        <div class="nav-brand">
+            <div class="nav-brand-icon">⚡</div>
+            <span class="nav-brand-text">SwiftDeploy Console</span>
+        </div>
+    </nav>
 
-<div class="details-container">
-    <a href="/" class="back-link">← Back to Dashboard</a>
+    <div class="details-container">
+        <a href="/" class="back-link">← Back to Dashboard</a>
 
-    <div class="details-header">
-        <div class="details-title-wrap">
-            <div class="details-id">{{ pipeline.pipeline_id }}</div>
-            <div class="details-meta">
-                Executed on {{ pipeline.created_at }} &bull; 
-                <span class="status-badge status-{{ pipeline.status }}">{{ pipeline.status }}</span>
+        <div class="details-header">
+            <div class="details-title-wrap">
+                <div class="details-id">{{ pipeline.pipeline_id }}</div>
+                <div class="details-meta">
+                    Executed on {{ pipeline.created_at }} &bull;
+                    <span class="status-badge status-{{ pipeline.status }}">{{ pipeline.status }}</span>
+                </div>
+            </div>
+            <div class="details-actions">
+                <button class="btn-download" onclick="downloadReport('{{ pipeline.id }}')">
+                    <span>📄</span> Download PDF Report
+                </button>
             </div>
         </div>
-        <div class="details-actions">
-            <button class="btn-download" onclick="downloadReport('{{ pipeline.id }}')">
-                <span>📄</span> Download PDF Report
-            </button>
-        </div>
-    </div>
 
-    <!-- Info Grid -->
-    <div class="info-grid">
-        <div class="info-card">
-            <div class="info-label">Repository</div>
-            <div class="info-value">{{ pipeline.repository }}</div>
-        </div>
-        <div class="info-card">
-            <div class="info-label">Branch</div>
-            <div class="info-value">{{ pipeline.branch }}</div>
-        </div>
-        <div class="info-card">
-            <div class="info-label">Commit ID</div>
-            <div class="info-value text-mono">{{ pipeline.commit_id[:8] }}</div>
-        </div>
-        <div class="info-card">
-            <div class="info-label">Author</div>
-            <div class="info-value">{{ pipeline.commit_author }}</div>
-        </div>
-    </div>
-
-    <!-- Stage Table -->
-    <div class="section-title">Stage Execution Timeline</div>
-    <table class="stage-table">
-        <thead>
-            <tr>
-                <th>Stage Name</th>
-                <th>Start Time</th>
-                <th>End Time</th>
-                <th>Duration</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for stage in pipeline.stages %}
-            <tr>
-                <td>
-                    <div class="stage-name-cell">
-                        <div class="stage-dot dot-{{ stage.status }}"></div>
-                        {{ stage.name }}
-                    </div>
-                </td>
-                <td>{{ stage.start or '—' }}</td>
-                <td>{{ stage.end or '—' }}</td>
-                <td>{{ stage.duration }}s</td>
-                <td>{{ stage.status }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <!-- Explanations -->
-    <div class="explanation-section">
-        {% if pipeline.governance_decision %}
-        <div class="explanation-card {% if pipeline.governance_decision == 'BLOCK' %}card-failure{% else %}card-success{% endif %}">
-            <div class="card-title">
-                🛡️ Governance Decision: {{ pipeline.governance_decision }}
+        <!-- Info Grid -->
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-label">Repository</div>
+                <div class="info-value">{{ pipeline.repository }}</div>
             </div>
-            <div class="explanation-text">{{ pipeline.governance_explanation }}</div>
-        </div>
-        {% endif %}
-
-        {% if pipeline.failure_stage %}
-        <div class="explanation-card card-failure">
-            <div class="card-title">
-                ⚠️ Failure Analysis: {{ pipeline.failure_stage }} stage
+            <div class="info-card">
+                <div class="info-label">Branch</div>
+                <div class="info-value">{{ pipeline.branch }}</div>
             </div>
-            <div class="explanation-text">{{ pipeline.failure_explanation }}</div>
-            {% if pipeline.failure_log_snippet %}
-            <pre class="log-console" style="margin-top: 16px; font-size: 12px;">{{ pipeline.failure_log_snippet }}</pre>
+            <div class="info-card">
+                <div class="info-label">Commit ID</div>
+                <div class="info-value text-mono">{{ (pipeline.commit_id or 'unknown')[:8] }}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Author</div>
+                <div class="info-value">{{ pipeline.commit_author }}</div>
+            </div>
+        </div>
+
+        <!-- Stage Table -->
+        <div class="section-title">Stage Execution Timeline</div>
+        <table class="stage-table">
+            <thead>
+                <tr>
+                    <th>Stage Name</th>
+                    <th>Start Time</th>
+                    <th>End Time</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for stage in pipeline.stages %}
+                <tr>
+                    <td>
+                        <div class="stage-name-cell">
+                            <div class="stage-dot dot-{{ stage.status }}"></div>
+                            {{ stage.name }}
+                        </div>
+                    </td>
+                    <td>{{ stage.start or '—' }}</td>
+                    <td>{{ stage.end or '—' }}</td>
+                    <td>{{ stage.duration }}s</td>
+                    <td>{{ stage.status }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <!-- Explanations -->
+        <div class="explanation-section">
+            {% if pipeline.governance_decision %}
+            <div
+                class="explanation-card {% if pipeline.governance_decision == 'BLOCK' %}card-failure{% else %}card-success{% endif %}">
+                <div class="card-title">
+                    🛡️ Governance Decision: {{ pipeline.governance_decision }}
+                </div>
+                <div class="explanation-text">{{ pipeline.governance_explanation }}</div>
+            </div>
+            {% endif %}
+
+            {% if pipeline.failure_stage %}
+            <div class="explanation-card card-failure">
+                <div class="card-title">
+                    ⚠️ Failure Analysis: {{ pipeline.failure_stage }} stage
+                </div>
+                <div class="explanation-text">{{ pipeline.failure_explanation }}</div>
+                {% if pipeline.failure_log_snippet %}
+                <pre class="log-console"
+                    style="margin-top: 16px; font-size: 12px;">{{ pipeline.failure_log_snippet }}</pre>
+                {% endif %}
+            </div>
             {% endif %}
         </div>
-        {% endif %}
     </div>
-</div>
 
-<script>
-    function downloadReport(id) {
-        window.location.href = `/api/pipelines/report/pdf/${id}`;
-    }
-</script>
+    <script>
+        function downloadReport(id) {
+            window.location.href = `/api/pipelines/report/pdf/${id}`;
+        }
+    </script>
 
 </body>
+
 </html>

@@ -4,7 +4,7 @@ import os
 import json
 import uuid
 import random
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fpdf import FPDF
 import io
 
@@ -273,8 +273,8 @@ def github_webhook():
         parsed_data.get("commit_id", ""),
         parsed_data.get("author", ""),
         parsed_data.get("commit_message", ""),
-        datetime.utcnow().isoformat(),
-        datetime.utcnow().isoformat(),
+        datetime.now(timezone.utc).isoformat(),
+        datetime.now(timezone.utc).isoformat(),
     ))
     conn.commit()
     conn.close()
@@ -329,11 +329,16 @@ def pipeline_report():
 
         if not existing and data.get("commit_id"):
             # Try to correlate by commit_id if this was a webhook-triggered build waiting in 'queued' state
+            print(f"[Correlation] Attempting to link Jenkins ID {pipeline_id} to webhook record using commit {data.get('commit_id')}")
             conn.execute(
                 "UPDATE pipelines SET pipeline_id = ?, status = ? WHERE commit_id = ? AND status = 'queued'",
                 (pipeline_id, data.get("status", "running"), data.get("commit_id"))
             )
             existing = conn.execute("SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+            if existing:
+                print(f"[Correlation] Success! Jenkins {pipeline_id} linked to existing webhook record.")
+            else:
+                print(f"[Correlation] No matching queued record found for commit {data.get('commit_id')}")
 
         if not existing:
             # Create new pipeline if still not found
@@ -348,8 +353,8 @@ def pipeline_report():
                 data.get("commit_author", ""),
                 data.get("commit_message", ""),
                 data.get("status", "running"),
-                datetime.utcnow().isoformat(),
-                datetime.utcnow().isoformat(),
+                datetime.now(timezone.utc).isoformat(),
+                datetime.now(timezone.utc).isoformat(),
             ))
 
         # Build dynamic UPDATE from provided stage data
@@ -376,7 +381,7 @@ def pipeline_report():
 
         if update_fields:
             update_fields.append("updated_at = ?")
-            update_values.append(datetime.utcnow().isoformat())
+            update_values.append(datetime.now(timezone.utc).isoformat())
             update_values.append(pipeline_id)
 
             conn.execute(
