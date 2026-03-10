@@ -1,181 +1,197 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CI/CD Operations Console — SwiftDeploy</title>
-    <meta name="description" content="Enterprise CI/CD monitoring dashboard with real-time pipeline visibility, stage metrics, and governance decisions.">
+    <meta name="description"
+        content="Enterprise CI/CD monitoring dashboard with real-time pipeline visibility, stage metrics, and governance decisions.">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
 </head>
+
 <body>
 
-<!-- ======== Top Navigation ======== -->
-<nav class="top-nav">
-    <div class="nav-brand">
-        <div class="nav-brand-icon">⚡</div>
-        <span class="nav-brand-text">SwiftDeploy Console</span>
-    </div>
-
-    <div class="nav-links">
-        <button class="nav-link active" data-page="dashboard">
-            <span class="nav-icon">📊</span> Dashboard
-        </button>
-        <button class="nav-link" data-page="history">
-            <span class="nav-icon">📜</span> Build History
-        </button>
-        <button class="nav-link" data-page="metrics">
-            <span class="nav-icon">📈</span> Metrics
-        </button>
-        <button class="nav-link" data-page="logs">
-            <span class="nav-icon">🖥️</span> System Logs
-        </button>
-    </div>
-
-    <div class="nav-status">
-        <div class="nav-live-badge">
-            <div class="live-dot"></div>
-            LIVE
-        </div>
-    </div>
-</nav>
-
-<!-- ======== Main Content ======== -->
-<div class="main-content">
-
-    <!-- ===== Dashboard Page ===== -->
-    <div id="page-dashboard" class="page-section active">
-        <div class="page-header">
-            <h1 class="page-title">Pipeline Dashboard</h1>
-            <p class="page-subtitle">Real-time CI/CD pipeline monitoring and observability</p>
+    <!-- ======== Top Navigation ======== -->
+    <nav class="top-nav">
+        <div class="nav-brand">
+            <div class="nav-brand-icon">⚡</div>
+            <span class="nav-brand-text">SwiftDeploy Console</span>
         </div>
 
-        <!-- Global Metrics -->
-        <div id="metrics-grid" class="metrics-grid">
-            <!-- Rendered by JS -->
+        <div class="nav-links">
+            <button class="nav-link active" data-page="dashboard">
+                <span class="nav-icon">📊</span> Dashboard
+            </button>
+            <button class="nav-link" data-page="history">
+                <span class="nav-icon">📜</span> Build History
+            </button>
+            <button class="nav-link" data-page="metrics">
+                <span class="nav-icon">📈</span> Metrics
+            </button>
+            <button class="nav-link" data-page="logs">
+                <span class="nav-icon">🖥️</span> System Logs
+            </button>
         </div>
 
-        <!-- Active Pipelines -->
-        <div class="section-title">
-            <span class="section-icon">🔄</span> Active Pipelines
-        </div>
-        <div id="active-pipelines" class="pipeline-list">
-            <div class="empty-state">
-                <div class="empty-state-icon">⏳</div>
-                <div class="empty-state-text">Loading active pipelines...</div>
+        <div class="nav-status">
+            <div class="nav-live-badge">
+                <div class="live-dot"></div>
+                LIVE
             </div>
         </div>
+    </nav>
 
-        <!-- Recent Pipelines -->
-        <div class="section-title mt-16">
-            <span class="section-icon">🕐</span> Recent Pipeline Runs
-        </div>
-        <div id="recent-pipelines" class="pipeline-list">
-            <div class="empty-state">
-                <div class="empty-state-icon">⏳</div>
-                <div class="empty-state-text">Loading recent pipelines...</div>
+    <!-- ======== Main Content ======== -->
+    <div class="main-content">
+
+        <!-- ===== Dashboard Page ===== -->
+        <div id="page-dashboard" class="page-section active">
+            <div class="page-header">
+                <h1 class="page-title">Pipeline Dashboard</h1>
+                <p class="page-subtitle">Real-time CI/CD pipeline monitoring and observability</p>
             </div>
-        </div>
-    </div>
 
-    <!-- ===== Build History Page ===== -->
-    <div id="page-history" class="page-section">
-        <div class="page-header">
-            <h1 class="page-title">Build History</h1>
-            <p class="page-subtitle">Search and filter all pipeline executions</p>
-        </div>
+            <!-- Global Metrics -->
+            <div id="metrics-grid" class="metrics-grid">
+                <!-- Rendered by JS -->
+            </div>
 
-        <div class="history-controls">
-            <input type="text" id="history-search" class="search-input" placeholder="🔍  Search builds by ID, message, or author...">
-            <select id="history-filter-status" class="filter-select">
-                <option value="">All Statuses</option>
-                <option value="success">✅ Success</option>
-                <option value="failed">❌ Failed</option>
-                <option value="blocked">🚫 Blocked</option>
-                <option value="running">🔄 Running</option>
-                <option value="queued">⏸️ Queued</option>
-            </select>
-            <select id="history-filter-repo" class="filter-select">
-                <option value="">All Repositories</option>
-                <option value="ci_cd_automation_platform">ci_cd_automation_platform</option>
-                <option value="frontend-app">frontend-app</option>
-                <option value="api-gateway">api-gateway</option>
-                <option value="auth-service">auth-service</option>
-            </select>
-        </div>
-
-        <table class="history-table">
-            <thead>
-                <tr>
-                    <th>Pipeline ID</th>
-                    <th>Commit Message</th>
-                    <th>Author</th>
-                    <th>Duration</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody id="history-tbody">
-                <tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">Loading build history...</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- ===== Metrics Page ===== -->
-    <div id="page-metrics" class="page-section">
-        <div class="page-header">
-            <h1 class="page-title">Pipeline Metrics</h1>
-            <p class="page-subtitle">Aggregated performance and reliability analytics</p>
-        </div>
-
-        <div id="metrics-overview-cards" class="metrics-grid mb-16">
-            <!-- Rendered by JS -->
-        </div>
-
-        <div class="charts-grid">
-            <div class="chart-card">
-                <div class="chart-title">Pipeline Duration Trend</div>
-                <div class="chart-canvas-wrap">
-                    <canvas id="duration-chart"></canvas>
+            <!-- Active Pipelines -->
+            <div class="section-title">
+                <span class="section-icon">🔄</span> Active Pipelines
+            </div>
+            <div id="active-pipelines" class="pipeline-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div class="empty-state-text">Loading active pipelines...</div>
                 </div>
             </div>
-            <div class="chart-card">
-                <div class="chart-title">Pipeline Status Distribution</div>
-                <div class="chart-canvas-wrap">
-                    <canvas id="status-chart"></canvas>
+
+            <!-- Recent Pipelines -->
+            <div class="section-title mt-16">
+                <span class="section-icon">🕐</span> Recent Pipeline Runs
+            </div>
+            <div id="recent-pipelines" class="pipeline-list">
+                <div class="empty-state">
+                    <div class="empty-state-icon">⏳</div>
+                    <div class="empty-state-text">Loading recent pipelines...</div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- ===== System Logs Page ===== -->
-    <div id="page-logs" class="page-section">
-        <div class="page-header">
-            <h1 class="page-title">System Logs</h1>
-            <p class="page-subtitle">Real-time system activity and event logs</p>
+        <!-- ===== Build History Page ===== -->
+        <div id="page-history" class="page-section">
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 class="page-title">Build History</h1>
+                    <p class="page-subtitle">Search and filter all pipeline executions</p>
+                </div>
+                <button id="btn-clean-history" class="log-modal-btn"
+                    style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 16px;">
+                    🗑️ Clean History
+                </button>
+            </div>
+
+            <div class="history-controls">
+                <input type="text" id="history-search" class="search-input"
+                    placeholder="🔍  Search builds by ID, message, or author...">
+                <select id="history-filter-status" class="filter-select">
+                    <option value="">All Statuses</option>
+                    <option value="success">✅ Success</option>
+                    <option value="failed">❌ Failed</option>
+                    <option value="blocked">🚫 Blocked</option>
+                    <option value="running">🔄 Running</option>
+                    <option value="queued">⏸️ Queued</option>
+                </select>
+                <select id="history-filter-repo" class="filter-select">
+                    <option value="">All Repositories</option>
+                    <option value="ci_cd_automation_platform">ci_cd_automation_platform</option>
+                    <option value="frontend-app">frontend-app</option>
+                    <option value="api-gateway">api-gateway</option>
+                    <option value="auth-service">auth-service</option>
+                </select>
+            </div>
+
+            <table class="history-table">
+                <thead>
+                    <tr>
+                        <th>Pipeline ID</th>
+                        <th>Commit Message</th>
+                        <th>Author</th>
+                        <th>Duration</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="history-tbody">
+                    <tr>
+                        <td colspan="6" style="text-align:center;padding:32px;color:var(--text-muted);">Loading build
+                            history...</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
 
-        <div id="system-log-output" class="system-log-console">
-            <div class="log-line"><span class="log-ts">[--:--:--]</span> <span class="log-level-info">[INFO]</span> Waiting for system initialization...</div>
-        </div>
-    </div>
+        <!-- ===== Metrics Page ===== -->
+        <div id="page-metrics" class="page-section">
+            <div class="page-header">
+                <h1 class="page-title">Pipeline Metrics</h1>
+                <p class="page-subtitle">Aggregated performance and reliability analytics</p>
+            </div>
 
-</div>
+            <div id="metrics-overview-cards" class="metrics-grid mb-16">
+                <!-- Rendered by JS -->
+            </div>
 
-<!-- ======== Log Viewer Modal ======== -->
-<div id="log-modal-overlay" class="log-modal-overlay">
-    <div class="log-modal">
-        <div class="log-modal-header">
-            <span id="log-modal-title" class="log-modal-title">Logs</span>
-            <div class="log-modal-actions">
-                <button class="log-modal-btn" onclick="window.AppController.copyLogContent()">📋 Copy</button>
-                <button class="log-modal-btn btn-close" onclick="window.AppController.closeLogModal()">✕ Close</button>
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <div class="chart-title">Pipeline Duration Trend</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="duration-chart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-title">Pipeline Status Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="status-chart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
-        <pre id="log-modal-content" class="log-console">Loading...</pre>
-    </div>
-</div>
 
-<script src="{{ url_for('static', filename='app.js') }}"></script>
+        <!-- ===== System Logs Page ===== -->
+        <div id="page-logs" class="page-section">
+            <div class="page-header">
+                <h1 class="page-title">System Logs</h1>
+                <p class="page-subtitle">Real-time system activity and event logs</p>
+            </div>
+
+            <div id="system-log-output" class="system-log-console">
+                <div class="log-line"><span class="log-ts">[--:--:--]</span> <span class="log-level-info">[INFO]</span>
+                    Waiting for system initialization...</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ======== Log Viewer Modal ======== -->
+    <div id="log-modal-overlay" class="log-modal-overlay">
+        <div class="log-modal">
+            <div class="log-modal-header">
+                <span id="log-modal-title" class="log-modal-title">Logs</span>
+                <div class="log-modal-actions">
+                    <button class="log-modal-btn" onclick="window.AppController.copyLogContent()">📋 Copy</button>
+                    <button class="log-modal-btn btn-close" onclick="window.AppController.closeLogModal()">✕
+                        Close</button>
+                </div>
+            </div>
+            <pre id="log-modal-content" class="log-console">Loading...</pre>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
+
 </html>

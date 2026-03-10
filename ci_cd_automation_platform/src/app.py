@@ -5,6 +5,8 @@ import json
 import uuid
 import random
 from datetime import datetime, timedelta
+from fpdf import FPDF
+import io
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -323,10 +325,18 @@ def pipeline_report():
         conn = get_db()
 
         # Check if pipeline exists
-        existing = conn.execute("SELECT id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+        existing = conn.execute("SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+
+        if not existing and data.get("commit_id"):
+            # Try to correlate by commit_id if this was a webhook-triggered build waiting in 'queued' state
+            conn.execute(
+                "UPDATE pipelines SET pipeline_id = ?, status = ? WHERE commit_id = ? AND status = 'queued'",
+                (pipeline_id, data.get("status", "running"), data.get("commit_id"))
+            )
+            existing = conn.execute("SELECT pipeline_id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
 
         if not existing:
-            # Create new pipeline
+            # Create new pipeline if still not found
             conn.execute("""
                 INSERT INTO pipelines (pipeline_id, repository, branch, commit_id, commit_author, commit_message, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -496,6 +506,130 @@ def pipeline_details(pipeline_db_id):
     pipeline = row_to_dict(row)
     pipeline["stages"] = build_stage_list(pipeline)
     return jsonify(pipeline)
+
+
+@app.route("/build/<int:pipeline_db_id>")
+def build_details_page(pipeline_db_id):
+    """Render the detailed full-page view for a specific build."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM pipelines WHERE id = ?", (pipeline_db_id,)).fetchone()
+    conn.close()
+    if not row:
+        return "Build not found", 404
+    
+    pipeline = row_to_dict(row)
+    pipeline["stages"] = build_stage_list(pipeline)
+    return render_template("build_details.html", pipeline=pipeline)
+
+
+@app.route("/api/admin/clean-db", methods=["POST"])
+def admin_clean_db():
+    """Wipes all pipeline and build records for a clean slate."""
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM pipelines")
+        conn.execute("DELETE FROM builds")
+        conn.commit()
+        conn.close()
+        return jsonify({"message": "Database cleaned successfully. All history purged."})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pipelines/report/pdf/<int:pipeline_db_id>")
+def download_pdf_report(pipeline_db_id):
+    """Generates and serves a PDF report for a specific pipeline execution."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM pipelines WHERE id = ?", (pipeline_db_id,)).fetchone()
+    conn.close()
+    
+    if not row:
+        return "Pipeline not found", 404
+    
+    p = row_to_dict(row)
+    stages = build_stage_list(p)
+    
+    # Generate PDF
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # Header
+    pdf.set_font("Helvetica", 'B', 16)
+    pdf.cell(0, 10, "SwiftDeploy - CI/CD Pipeline Report", ln=True, align='C')
+    pdf.set_font("Helvetica", '', 10)
+    pdf.cell(0, 10, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Summary Table
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, "1. Build Metadata", ln=True)
+    pdf.set_font("Helvetica", '', 10)
+    
+    data_summary = [
+        ["Pipeline ID", p["pipeline_id"]],
+        ["Repository", p["repository"] or "N/A"],
+        ["Branch", p["branch"] or "N/A"],
+        ["Commit", (p["commit_id"] or "N/A")[:12]],
+        ["Author", p["commit_author"] or "N/A"],
+        ["Status", (p["status"] or "waiting").upper()],
+        ["Duration", f"{p['total_pipeline_duration'] or 0}s"]
+    ]
+    
+    for row_data in data_summary:
+        pdf.cell(50, 8, row_data[0], border=1)
+        pdf.cell(0, 8, str(row_data[1]), border=1, ln=True)
+    
+    pdf.ln(10)
+    
+    # Stage Timeline
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, "2. Stage Timeline", ln=True)
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(60, 8, "Stage", border=1)
+    pdf.cell(40, 8, "Duration (s)", border=1)
+    pdf.cell(0, 8, "Status", border=1, ln=True)
+    
+    pdf.set_font("Helvetica", '', 10)
+    for s in stages:
+        pdf.cell(60, 8, s["name"], border=1)
+        pdf.cell(40, 8, f"{s['duration']}s", border=1)
+        pdf.cell(0, 8, (s["status"] or "waiting").upper(), border=1, ln=True)
+        
+    pdf.ln(10)
+    
+    # Governance & Failures
+    if p["governance_decision"] or p["failure_stage"]:
+        pdf.set_font("Helvetica", 'B', 12)
+        pdf.cell(0, 10, "3. Analysis & Governance", ln=True)
+        pdf.set_font("Helvetica", '', 10)
+        
+        if p["governance_decision"]:
+            pdf.multi_cell(0, 8, f"Governance Decision: {p['governance_decision']}", border=1)
+            pdf.multi_cell(0, 8, f"Explanation: {p['governance_explanation'] or 'N/A'}", border=1)
+            pdf.ln(5)
+            
+        if p["failure_stage"]:
+            pdf.set_text_color(200, 0, 0)
+            pdf.multi_cell(0, 8, f"FAILURE at {p['failure_stage']} stage", border=1)
+            pdf.set_text_color(0, 0, 0)
+            pdf.multi_cell(0, 8, f"Reason: {p['failure_explanation'] or 'N/A'}", border=1)
+    
+    # Send Binary
+    buffer = io.BytesIO()
+    pdf_output = pdf.output()
+    if isinstance(pdf_output, str): # Compatibility with different fpdf versions
+        buffer.write(pdf_output.encode('latin-1'))
+    else:
+        buffer.write(pdf_output)
+    
+    buffer.seek(0)
+    from flask import send_file
+    return send_file(
+        buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f"report_{p['pipeline_id']}.pdf"
+    )
 
 
 # --------------------------------------------------

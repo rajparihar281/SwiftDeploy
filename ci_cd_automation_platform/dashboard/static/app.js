@@ -244,6 +244,14 @@
             </div>
             <div class="stage-timeline">${stageTimeline}</div>
             <div class="stage-timeline-labels">${stageLabels}</div>
+            <div class="pipeline-actions" style="padding: 0 16px 16px 16px; display: flex; gap: 8px;">
+                <a href="/build/${p.id}" class="log-viewer-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center;">
+                    🔍 View Details
+                </a>
+                <button class="log-viewer-btn" onclick="window.AppController.downloadReport('${p.id}')" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: rgba(59, 130, 246, 0.2);">
+                    📄 PDF Report
+                </button>
+            </div>
             <div class="pipeline-details">${detailsHTML}</div>
         </div>`;
     }
@@ -359,22 +367,7 @@
     }
 
     async function openPipelineDetail(dbId) {
-        const data = await fetchJSON(`/api/pipelines/details/${dbId}`);
-        if (!data) return;
-
-        // Navigate to dashboard and show this pipeline expanded
-        navigateTo('dashboard');
-
-        // Render it in recent pipelines area
-        const container = document.getElementById('recent-pipelines');
-        if (!container) return;
-        container.innerHTML = buildPipelineCard(data);
-        attachPipelineCardEvents(container);
-
-        // Auto-expand
-        setTimeout(() => {
-            container.querySelector('.pipeline-card')?.classList.add('expanded');
-        }, 100);
+        window.location.href = `/build/${dbId}`;
     }
 
     // ---- Render: Metrics Charts ----
@@ -511,6 +504,10 @@
         if (overlay) overlay.classList.remove('open');
     }
 
+    function downloadReport(id) {
+        window.location.href = `/api/pipelines/report/pdf/${id}`;
+    }
+
     function copyLogContent() {
         const content = document.getElementById('log-modal-content');
         if (content) {
@@ -591,6 +588,23 @@
         }
         if (statusFilter) statusFilter.addEventListener('change', () => loadHistory());
         if (repoFilter) repoFilter.addEventListener('change', () => loadHistory());
+
+        const cleanBtn = document.getElementById('btn-clean-history');
+        if (cleanBtn) {
+            cleanBtn.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to PERMANENTLY delete all build history? This cannot be undone.')) {
+                    const res = await fetch('/api/admin/clean-db', { method: 'POST' });
+                    const data = await res.json();
+                    if (res.ok) {
+                        addSystemLog('success', data.message);
+                        loadHistory();
+                        loadMetrics();
+                    } else {
+                        addSystemLog('error', `Failed to clean DB: ${data.error}`);
+                    }
+                }
+            });
+        }
     }
 
     // ---- Init ----
@@ -614,6 +628,7 @@
         openLogModal,
         closeLogModal,
         copyLogContent,
+        downloadReport,
     };
 
     // Start
