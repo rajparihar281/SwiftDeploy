@@ -473,29 +473,71 @@ def pipelines_history():
 def pipelines_metrics():
     conn = get_db()
 
+    # Basic Counts
     total = conn.execute("SELECT COUNT(*) FROM pipelines").fetchone()[0]
     success = conn.execute("SELECT COUNT(*) FROM pipelines WHERE status = 'success'").fetchone()[0]
     failed = conn.execute("SELECT COUNT(*) FROM pipelines WHERE status = 'failed'").fetchone()[0]
     blocked = conn.execute("SELECT COUNT(*) FROM pipelines WHERE status = 'blocked'").fetchone()[0]
     active = conn.execute("SELECT COUNT(*) FROM pipelines WHERE status IN ('queued', 'running')").fetchone()[0]
 
+    # Global Durations
     avg_duration = conn.execute("SELECT AVG(total_pipeline_duration) FROM pipelines WHERE total_pipeline_duration > 0").fetchone()[0] or 0
+    
+    # Status Distribution details
+    counts_by_status = conn.execute("SELECT status, COUNT(*) as count FROM pipelines GROUP BY status").fetchall()
+    status_distribution = {row['status']: row['count'] for row in counts_by_status}
 
-    # Average test duration
-    rows = conn.execute("""
-        SELECT stage_test_start, stage_test_end FROM pipelines
-        WHERE stage_test_start IS NOT NULL AND stage_test_end IS NOT NULL
+    # Time-series Trend (Last 30 builds)
+    trend_rows = conn.execute("""
+        SELECT pipeline_id, total_pipeline_duration, test_pass_count, test_fail_count, status, created_at 
+        FROM pipelines 
+        WHERE status NOT IN ('queued', 'running')
+        ORDER BY created_at DESC LIMIT 30
     """).fetchall()
-    test_durations = [calc_duration_seconds(r["stage_test_start"], r["stage_test_end"]) for r in rows]
-    avg_test_duration = round(sum(test_durations) / len(test_durations), 2) if test_durations else 0
+    
+    history_trend = []
+    for r in reversed(trend_rows):
+        history_trend.append({
+            "id": r['pipeline_id'][:8],
+            "duration": r['total_pipeline_duration'] or 0,
+            "tests_pass": r['test_pass_count'] or 0,
+            "tests_fail": r['test_fail_count'] or 0,
+            "status": r['status']
+        })
 
-    # Average build duration
-    brows = conn.execute("""
-        SELECT stage_build_start, stage_build_end FROM pipelines
-        WHERE stage_build_start IS NOT NULL AND stage_build_end IS NOT NULL
+    # Stage Averages
+    stage_keys = ["checkout", "install", "test", "metrics", "governance", "build", "deploy"]
+    stage_averages = {}
+    for key in stage_keys:
+        rows = conn.execute(f"""
+            SELECT stage_{key}_start, stage_{key}_end FROM pipelines
+            WHERE stage_{key}_start IS NOT NULL AND stage_{key}_end IS NOT NULL
+        """).fetchall()
+        durs = [calc_duration_seconds(r[f"stage_{key}_start"], r[f"stage_{key}_end"]) for r in rows]
+        stage_averages[key] = round(sum(durs) / len(durs), 2) if durs else 0
+
+    # Build Frequency (Last 7 days)
+    frequency_rows = conn.execute("""
+        SELECT date(created_at) as day, COUNT(*) as count 
+        FROM pipelines 
+        WHERE created_at >= date('now', '-7 days')
+        GROUP BY day ORDER BY day ASC
     """).fetchall()
-    build_durations = [calc_duration_seconds(r["stage_build_start"], r["stage_build_end"]) for r in brows]
-    avg_build_duration = round(sum(build_durations) / len(build_durations), 2) if build_durations else 0
+    build_frequency = {row['day']: row['count'] for row in frequency_rows}
+
+    # Top Contributors
+    top_authors = conn.execute("SELECT commit_author, COUNT(*) as count FROM pipelines GROUP BY commit_author ORDER BY count DESC LIMIT 5").fetchall()
+    top_repos = conn.execute("SELECT repository, COUNT(*) as count FROM pipelines GROUP BY repository ORDER BY count DESC LIMIT 5").fetchall()
+    
+    # Reliability Metrics
+    deploy_total = conn.execute("SELECT COUNT(*) FROM pipelines WHERE stage_deploy_status != 'waiting'").fetchone()[0]
+    deploy_success = conn.execute("SELECT COUNT(*) FROM pipelines WHERE stage_deploy_status = 'completed'").fetchone()[0]
+    
+    # Health Score Calculation (Simplified logic)
+    # 50% success rate, 30% test pass rate, 20% duration stability
+    success_rate = (success / total * 100) if total > 0 else 0
+    deploy_rate = (deploy_success / deploy_total * 100) if deploy_total > 0 else 0
+    health_score = round((success_rate * 0.6) + (deploy_rate * 0.4)) if total > 0 else 0
 
     conn.close()
 
@@ -506,8 +548,27 @@ def pipelines_metrics():
         "blocked_deployments": blocked,
         "active_pipelines": active,
         "avg_pipeline_duration": round(avg_duration, 2),
-        "avg_test_duration": avg_test_duration,
-        "avg_build_duration": avg_build_duration,
+        "avg_test_duration": stage_averages.get("test", 0),
+        "avg_build_duration": stage_averages.get("build", 0),
+        
+        # New analytics
+        "status_distribution": status_distribution,
+        "history_trend": history_trend,
+        "stage_averages": stage_averages,
+        "build_frequency": build_frequency,
+        "top_authors": [{"name": r['commit_author'], "count": r['count']} for r in top_authors],
+        "top_repositories": [{"name": r['repository'], "count": r['count']} for r in top_repos],
+        "deployment_stats": {
+            "total": deploy_total,
+            "success": deploy_success,
+            "failed": deploy_total - deploy_success,
+            "rate": round(deploy_rate, 1)
+        },
+        "health_score": health_score,
+        "test_stats": {
+            "total_executed": sum(r['tests_pass'] + r['tests_fail'] for r in history_trend),
+            "avg_pass_rate": round(sum(r['tests_pass'] for r in history_trend) / sum(r['tests_pass'] + r['tests_fail'] if (r['tests_pass'] + r['tests_fail']) > 0 else 1 for r in history_trend) * 100, 1) if history_trend else 0
+        }
     })
 
 

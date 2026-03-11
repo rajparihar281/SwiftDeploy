@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Build Details — {{ pipeline.pipeline_id }} — SwiftDeploy</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         .details-container {
             max-width: 1000px;
@@ -211,7 +212,7 @@
 
     <nav class="top-nav">
         <div class="nav-brand">
-            <div class="nav-brand-icon">⚡</div>
+            <div class="nav-brand-icon"><i data-lucide="zap" size="18" stroke-width="3"></i></div>
             <span class="nav-brand-text">SwiftDeploy Console</span>
         </div>
     </nav>
@@ -272,13 +273,26 @@
                     <td>
                         <div class="stage-name-cell">
                             <div class="stage-dot dot-{{ stage.status }}"></div>
+                            {% if stage.status == 'completed' %}
+                                <i data-lucide="check-circle" size="14" style="color: var(--status-completed)"></i>
+                            {% elif stage.status == 'failed' %}
+                                <i data-lucide="x-circle" size="14" style="color: var(--status-failed)"></i>
+                            {% elif stage.status == 'running' %}
+                                <i data-lucide="loader-2" size="14" class="spin" style="color: var(--status-running)"></i>
+                            {% elif stage.status == 'blocked' %}
+                                <i data-lucide="alert-octagon" size="14" style="color: var(--status-blocked)"></i>
+                            {% else %}
+                                <i data-lucide="clock" size="14" style="color: var(--status-waiting)"></i>
+                            {% endif %}
                             {{ stage.name }}
                         </div>
                     </td>
                     <td>{{ stage.start or '—' }}</td>
                     <td>{{ stage.end or '—' }}</td>
                     <td>{{ stage.duration }}s</td>
-                    <td>{{ stage.status }}</td>
+                    <td>
+                        <span class="status-badge status-{{ stage.status }}">{{ stage.status }}</span>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -315,6 +329,8 @@
         function downloadReport(id) {
             window.location.href = `/api/pipelines/report/pdf/${id}`;
         }
+        // Initialize Lucide icons
+        lucide.createIcons();
     </script>
 
 </body>

@@ -9,6 +9,7 @@
         content="Enterprise CI/CD monitoring dashboard with real-time pipeline visibility, stage metrics, and governance decisions.">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 
 <body>
@@ -16,22 +17,22 @@
     <!-- ======== Top Navigation ======== -->
     <nav class="top-nav">
         <div class="nav-brand">
-            <div class="nav-brand-icon">⚡</div>
+            <div class="nav-brand-icon"><i data-lucide="zap" size="18" stroke-width="3"></i></div>
             <span class="nav-brand-text">SwiftDeploy Console</span>
         </div>
 
         <div class="nav-links">
             <button class="nav-link active" data-page="dashboard">
-                <span class="nav-icon">📊</span> Dashboard
+                <i data-lucide="layout-dashboard" class="nav-icon"></i> Dashboard
             </button>
             <button class="nav-link" data-page="history">
-                <span class="nav-icon">📜</span> Build History
+                <i data-lucide="history" class="nav-icon"></i> Build History
             </button>
             <button class="nav-link" data-page="metrics">
-                <span class="nav-icon">📈</span> Metrics
+                <i data-lucide="bar-chart-3" class="nav-icon"></i> Metrics
             </button>
             <button class="nav-link" data-page="logs">
-                <span class="nav-icon">🖥️</span> System Logs
+                <i data-lucide="terminal" class="nav-icon"></i> System Logs
             </button>
         </div>
 
@@ -55,7 +56,8 @@
 
             <!-- Global Metrics -->
             <div id="metrics-grid" class="metrics-grid">
-                <!-- Rendered by JS -->
+                <!-- Summary cards added here via JS enhancement or staticly if preferred -->
+                <!-- The existing metrics-grid already exists, I will enhance it via CSS/JS -->
             </div>
 
             <!-- Active Pipelines -->
@@ -141,21 +143,99 @@
                 <p class="page-subtitle">Aggregated performance and reliability analytics</p>
             </div>
 
-            <div id="metrics-overview-cards" class="metrics-grid mb-16">
+            <div id="metrics-overview-cards" class="metrics-grid mb-24">
                 <!-- Rendered by JS -->
             </div>
 
-            <div class="charts-grid">
-                <div class="chart-card">
-                    <div class="chart-title">Pipeline Duration Trend</div>
-                    <div class="chart-canvas-wrap">
-                        <canvas id="duration-chart"></canvas>
+            <div class="analytics-layout">
+                <!-- Left Column: Main Trends -->
+                <div class="analytics-main">
+                    <div class="chart-card mb-24">
+                        <div class="chart-header">
+                            <div class="chart-title"><i data-lucide="trending-up"></i> Pipeline Performance Trend</div>
+                            <div class="chart-subtitle">Duration trends for the last 30 executions</div>
+                        </div>
+                        <div class="chart-canvas-wrap" style="height: 300px;">
+                            <canvas id="duration-trend-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="grid-2 mb-24">
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title"><i data-lucide="activity"></i> Build Frequency</div>
+                                <div class="chart-subtitle">Pipeline triggers per day</div>
+                            </div>
+                            <div class="chart-canvas-wrap" style="height: 220px;">
+                                <canvas id="frequency-chart"></canvas>
+                            </div>
+                        </div>
+                        <div class="chart-card">
+                            <div class="chart-header">
+                                <div class="chart-title"><i data-lucide="clock"></i> Stage Timing Analysis</div>
+                                <div class="chart-subtitle">Average time spent per stage (seconds)</div>
+                            </div>
+                            <div class="chart-canvas-wrap" style="height: 220px;">
+                                <canvas id="stage-timing-chart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <div class="chart-title"><i data-lucide="check-square"></i> Test Execution Analytics</div>
+                            <div class="chart-subtitle">Pass/Fail trends across recent builds</div>
+                        </div>
+                        <div class="chart-canvas-wrap" style="height: 250px;">
+                            <canvas id="test-analytics-chart"></canvas>
+                        </div>
                     </div>
                 </div>
-                <div class="chart-card">
-                    <div class="chart-title">Pipeline Status Distribution</div>
-                    <div class="chart-canvas-wrap">
-                        <canvas id="status-chart"></canvas>
+
+                <!-- Right Column: Reliability & Health -->
+                <div class="analytics-side">
+                    <div class="chart-card mb-24">
+                        <div class="chart-header">
+                            <div class="chart-title">System Health Score</div>
+                        </div>
+                        <div class="health-score-container">
+                            <div id="health-gauge" class="health-gauge">
+                                <!-- Rendered by JS -->
+                                <div class="gauge-value" id="health-value">0%</div>
+                                <div class="gauge-label">Healthy</div>
+                            </div>
+                        </div>
+                        <div class="health-metrics-list" id="health-factors">
+                            <!-- Factors listed here -->
+                        </div>
+                    </div>
+
+                    <div class="chart-card mb-24">
+                        <div class="chart-header">
+                            <div class="chart-title">Build Success Distribution</div>
+                        </div>
+                        <div class="chart-canvas-wrap" style="height: 200px;">
+                            <canvas id="success-donut-chart"></canvas>
+                        </div>
+                        <div id="success-legend" class="donut-legend"></div>
+                    </div>
+
+                    <div class="chart-card mb-24">
+                        <div class="chart-header">
+                            <div class="chart-title">Top Contributors</div>
+                        </div>
+                        <div id="top-contributors" class="contributors-list">
+                            <!-- Rendered by JS -->
+                        </div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <div class="chart-title">Deployment Stability</div>
+                        </div>
+                        <div id="deployment-stability" class="stability-stats">
+                            <!-- Rendered by JS -->
+                        </div>
                     </div>
                 </div>
             </div>
@@ -192,6 +272,10 @@
     </div>
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
 </body>
 
 </html>
