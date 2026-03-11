@@ -77,10 +77,30 @@ pipeline {
                     env.TEST_LOG    = ""
                     def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
 
+                    // Normalize and validate test path
+                    def projectDir = params.PROJECT_DIR ?: "."
+                    if (projectDir.startsWith(".")) {
+                       // Strip leading dot if it's not just "."
+                       if (projectDir.length() > 1 && projectDir[1] == '/') {
+                           projectDir = projectDir.substring(2)
+                       } else if (projectDir.length() > 1 && projectDir.startsWith(".projects")) {
+                           projectDir = projectDir.substring(1) // .projects -> projects
+                       }
+                    }
+                    
+                    def testPath = "${projectDir}/tests/"
+                    echo "Checking for tests at: ${env.PLATFORM_DIR}/${testPath}"
+                    
+                    def testsExist = fileExists("${env.PLATFORM_DIR}/${testPath}")
+                    if (!testsExist) {
+                        echo "Warning: ${testPath} not found. Falling back to default tests directory."
+                        testPath = "tests/"
+                    }
+
                     try {
                         bat """
                             cd ${env.PLATFORM_DIR}
-                            venv\\\\Scripts\\\\python -m pytest ${params.PROJECT_DIR}/tests/ -v > pytest_output.txt
+                            venv\\\\Scripts\\\\python -m pytest ${testPath} -v > pytest_output.txt
                         """
                         env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
                     } catch (err) {
@@ -88,6 +108,8 @@ pipeline {
                         echo "Tests Failed: ${err}"
                         if (fileExists("${env.PLATFORM_DIR}/pytest_output.txt")) {
                             env.TEST_LOG = readFile("${env.PLATFORM_DIR}/pytest_output.txt")
+                        } else {
+                            env.TEST_LOG = "Fast-fail: Test directory missing or pytest failed to start."
                         }
                     }
                     def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
