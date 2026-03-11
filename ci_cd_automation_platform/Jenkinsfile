@@ -22,9 +22,13 @@ pipeline {
                     def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                     try {
                         def scmVars = checkout scm
-                        env.GIT_COMMIT = scmVars.GIT_COMMIT
-                        env.GIT_BRANCH = scmVars.GIT_BRANCH
-                        env.GIT_URL = scmVars.GIT_URL
+                        env.GIT_COMMIT = scmVars.GIT_COMMIT ?: bat(script: "@git rev-parse HEAD", returnStdout: true).trim()
+                        env.GIT_BRANCH = scmVars.GIT_BRANCH ?: bat(script: "@git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
+                        env.GIT_URL = scmVars.GIT_URL ?: bat(script: "@git config --get remote.origin.url", returnStdout: true).trim()
+                        
+                        // Capture author and message
+                        env.GIT_AUTHOR = bat(script: "@git log -1 --pretty=format:%an", returnStdout: true).trim()
+                        env.GIT_MESSAGE = bat(script: "@git log -1 --pretty=format:%s", returnStdout: true).trim()
 
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         
@@ -35,6 +39,8 @@ pipeline {
                             stage_checkout_end: stageEnd,
                             stage_checkout_status: 'completed',
                             commit_id: env.GIT_COMMIT,
+                            commit_author: env.GIT_AUTHOR,
+                            commit_message: env.GIT_MESSAGE,
                             branch: env.GIT_BRANCH,
                             repository: env.GIT_URL,
                             status: 'running'
@@ -130,6 +136,8 @@ pipeline {
                         test_fail_count: failCount,
                         test_skip_count: skipCount,
                         commit_id: env.GIT_COMMIT,
+                        commit_author: env.GIT_AUTHOR,
+                        commit_message: env.GIT_MESSAGE,
                         status: 'running'
                     ])
 
@@ -188,7 +196,9 @@ pipeline {
                             governance_explanation: result.decision == "BLOCK" ?
                                 "Deployment blocked: ${result.violations}" :
                                 "All governance checks passed.",
-                            commit_id: env.GIT_COMMIT, // Include for correlation
+                            commit_id: env.GIT_COMMIT,
+                            commit_author: env.GIT_AUTHOR,
+                            commit_message: env.GIT_MESSAGE,
                             status: result.decision == "BLOCK" ? "blocked" : "running"
                         ])
 
@@ -239,7 +249,9 @@ pipeline {
                             stage_deploy_end: stageEnd,
                             stage_deploy_status: 'completed',
                             container_health: 'healthy',
-                            commit_id: env.GIT_COMMIT, // Include for correlation
+                            commit_id: env.GIT_COMMIT,
+                            commit_author: env.GIT_AUTHOR,
+                            commit_message: env.GIT_MESSAGE,
                             status: 'success'
                         ])
 
@@ -263,6 +275,8 @@ def reportStage(stageName, startTime, endTime, status) {
         ("stage_${stageName}_end".toString()): endTime,
         ("stage_${stageName}_status".toString()): status,
         commit_id: env.GIT_COMMIT,
+        commit_author: env.GIT_AUTHOR,
+        commit_message: env.GIT_MESSAGE,
         repository: env.GIT_URL,
         branch: env.GIT_BRANCH,
         status: status == 'failed' ? 'failed' : 'running'
