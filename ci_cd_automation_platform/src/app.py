@@ -409,6 +409,52 @@ def pipeline_report():
 
 
 # --------------------------------------------------
+# Missing Features Endpoints
+# --------------------------------------------------
+
+@app.route("/api/metrics")
+def api_metrics():
+    """Fetch real-time CPU, RAM, Disk, and Build Time."""
+    try:
+        collector = MetricsCollector()
+        # For demo purposes, we'll simulate a 0.1s interval to get a reading
+        metrics = collector.collect_metrics()
+        return jsonify(metrics)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/decision")
+def api_decision():
+    """Fetch latest deployment decision and waste score."""
+    try:
+        row = ReportBuilder.fetch_latest_build()
+        if not row:
+            return jsonify({
+                "status": "No decision found",
+                "waste_score": 0,
+                "decision": "N/A",
+                "ai_explanation": "Waiting for first build evaluation..."
+            })
+        
+        # row: (build_id, waste_score, decision, timestamp)
+        # We also want the explanation if available
+        conn = get_db()
+        pipeline = conn.execute("SELECT governance_explanation FROM pipelines WHERE pipeline_id = ?", (row[0],)).fetchone()
+        conn.close()
+
+        return jsonify({
+            "build_id": row[0],
+            "waste_score": row[1],
+            "decision": row[2],
+            "timestamp": row[3],
+            "ai_explanation": pipeline['governance_explanation'] if pipeline and pipeline['governance_explanation'] else "Decision based on automated governance rules."
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --------------------------------------------------
 # Pipeline API Endpoints
 # --------------------------------------------------
 

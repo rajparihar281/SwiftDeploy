@@ -12,9 +12,22 @@
         metrics: {},
         activePipelines: [],
         historyPipelines: [],
+        resourceHistory: { cpu: [], ram: [], labels: [] },
         expandedPipelineId: null,
         refreshInterval: null,
+        metricsInterval: null,
+        decisionInterval: null,
         systemLogs: [],
+    };
+
+    const chartInstances = {
+        resource: null,
+        waste: null,
+        testAnalytics: null,
+        stageTiming: null,
+        frequency: null,
+        durationTrend: null,
+        successDonut: null
     };
 
     // ---- API Helpers ----
@@ -65,7 +78,12 @@
     async function loadPageData(page) {
         switch (page) {
             case 'dashboard':
-                await Promise.all([loadMetrics(), loadActivePipelines()]);
+                await Promise.all([
+                    loadMetrics(), 
+                    loadActivePipelines(),
+                    loadSystemMetrics(),
+                    loadDecision()
+                ]);
                 break;
             case 'history':
                 await loadHistory();
@@ -131,6 +149,142 @@
             state.historyPipelines = history;
             renderDurationChart(history);
             renderStatusChart(history);
+        }
+    }
+
+    async function loadSystemMetrics() {
+        const data = await fetchJSON('/api/metrics');
+        if (data) {
+            renderSystemMetrics(data);
+        }
+    }
+
+    async function loadDecision() {
+        const data = await fetchJSON('/api/decision');
+        if (data) {
+            renderDecisionPanel(data);
+        }
+    }
+
+    function renderResourceChart(cpu, ram) {
+        const ctx = document.getElementById('resourceChart');
+        if (!ctx) return;
+
+        const maxPoints = 20;
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        state.resourceHistory.labels.push(now);
+        state.resourceHistory.cpu.push(cpu);
+        state.resourceHistory.ram.push(ram);
+
+        if (state.resourceHistory.labels.length > maxPoints) {
+            state.resourceHistory.labels.shift();
+            state.resourceHistory.cpu.shift();
+            state.resourceHistory.ram.shift();
+        }
+
+        if (chartInstances.resource) {
+            chartInstances.resource.update('none');
+        } else {
+            chartInstances.resource = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: state.resourceHistory.labels,
+                    datasets: [
+                        {
+                            label: 'CPU %',
+                            data: state.resourceHistory.cpu,
+                            borderColor: '#00f2ff',
+                            backgroundColor: 'rgba(0, 242, 255, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'RAM %',
+                            data: state.resourceHistory.ram,
+                            borderColor: '#00ffa3',
+                            backgroundColor: 'rgba(0, 255, 163, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: getChartOptions({
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        y: { min: 0, max: 100, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        x: { display: false }
+                    }
+                })
+            });
+        }
+    }
+
+    function renderWasteChart(totalWaste) {
+        const ctx = document.getElementById('wasteChart');
+        if (!ctx) return;
+
+        // Breakdown based on backend weights: CPU (40%), Memory (30%), Time (30%)
+        // For visualization, we'll split the current waste score proportionally
+        const cpuWaste = totalWaste * 0.4;
+        const memWaste = totalWaste * 0.3;
+        const timeWaste = totalWaste * 0.3;
+
+        if (chartInstances.waste) {
+            chartInstances.waste.data.datasets[0].data = [cpuWaste, memWaste, timeWaste];
+            chartInstances.waste.update();
+        } else {
+            chartInstances.waste = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Resource (CPU)', 'Resource (RAM)', 'Execution Time'],
+                    datasets: [{
+                        data: [cpuWaste, memWaste, timeWaste],
+                        backgroundColor: [
+                            'rgba(0, 242, 255, 0.7)',
+                            'rgba(0, 255, 163, 0.7)',
+                            'rgba(255, 0, 85, 0.7)'
+                        ],
+                        borderWidth: 0,
+                        hoverOffset: 15
+                    }]
+                },
+                options: getChartOptions({
+                    cutout: '70%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } }
+                    }
+                })
+            });
+        }
+    }
+
+    // ---- Render: Background ----
+    function initBackground() {
+        const field = document.getElementById('star-field');
+        if (!field) return;
+
+        for (let i = 0; i < 120; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            const size = Math.random() * 2.5 + 1;
+            const x = Math.random() * 100;
+            const y = Math.random() * 100;
+            const duration = Math.random() * 4 + 1.5;
+            const delay = Math.random() * 5;
+
+            star.style.width = `${size}px`;
+            star.style.height = `${size}px`;
+            star.style.left = `${x}%`;
+            star.style.top = `${y}%`;
+            star.style.setProperty('--d', `${duration}s`);
+            star.style.animationDelay = `${delay}s`;
+
+            field.appendChild(star);
         }
     }
 
@@ -435,7 +589,6 @@
     }
 
     // ---- Render: Metrics Dashboard ----
-    let chartInstances = {};
 
     function renderMetricsCharts(m) {
         updateMetricCards(m);
@@ -838,6 +991,20 @@
                 loadActivePipelines();
             }
         }, 15000); // 15 seconds
+
+        // System Metrics Refresh (5s)
+        state.metricsInterval = setInterval(() => {
+            if (state.activePage === 'dashboard') {
+                loadSystemMetrics();
+            }
+        }, 5000);
+
+        // Decision Refresh (10s)
+        state.decisionInterval = setInterval(() => {
+            if (state.activePage === 'dashboard') {
+                loadDecision();
+            }
+        }, 10000);
     }
 
     // ---- History Controls ----
@@ -880,6 +1047,7 @@
         addSystemLog('info', 'Connecting to monitoring endpoints...');
         initNavigation();
         initHistoryControls();
+        initBackground();
         navigateTo('dashboard');
         startAutoRefresh();
         addSystemLog('success', 'Dashboard ready — auto-refresh enabled (15s)');
@@ -903,5 +1071,74 @@
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
+    }
+
+    function renderSystemMetrics(data) {
+        const container = document.getElementById('system-metrics-grid');
+        if (!container) return;
+
+        const metrics = [
+            { label: 'CPU Usage', val: data.cpu, unit: '%', icon: 'cpu', color: 'cyan' },
+            { label: 'RAM Usage', val: data.memory, unit: '%', icon: 'memory-stick', color: 'emerald' },
+            { label: 'Disk Space', val: data.disk, unit: '%', icon: 'hard-drive', color: 'amber' },
+            { label: 'Build Time', val: data.build_time, unit: 's', icon: 'clock', color: 'crimson' }
+        ];
+
+        container.innerHTML = metrics.map(m => `
+            <div class="metric-card glass-pane">
+                <div class="metric-icon-bg"><i data-lucide="${m.icon}" size="18"></i></div>
+                <div class="metric-label font-display">${m.label}</div>
+                <div class="metric-value font-mono text-glow-${m.color}">${m.val}<span class="metric-unit">${m.unit}</span></div>
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar-fill" style="width: ${m.val}%; background-color: var(--color-neon-${m.color});"></div>
+                </div>
+            </div>
+        `).join('');
+        renderResourceChart(data.cpu, data.memory);
+        refreshLucide();
+    }
+
+    function renderDecisionPanel(data) {
+        const container = document.getElementById('decision-panel-container');
+        if (!container) return;
+
+        const statusLower = (data.decision || 'N/A').toLowerCase();
+        let statusClass = 'status-delayed';
+        let icon = 'alert-triangle';
+
+        if (statusLower === 'approved') {
+            statusClass = 'status-approved';
+            icon = 'check-circle-2';
+        } else if (statusLower === 'blocked' || statusLower === 'block') {
+            statusClass = 'status-blocked';
+            icon = 'x-circle';
+        }
+
+        container.innerHTML = `
+            <div class="decision-panel glass-pane ${statusClass}">
+                <div class="decision-glow"></div>
+                <div class="decision-icon-wrap">
+                    <i data-lucide="${icon}" class="text-glow-${statusClass.split('-')[1]}"></i>
+                </div>
+                <div class="decision-content">
+                    <div class="decision-status-badge">
+                        <i data-lucide="${icon}" size="14"></i>
+                        Status: ${data.decision || 'PENDING'}
+                    </div>
+                    <div class="decision-msg font-display">
+                        ${data.decision === 'APPROVED' ? 'System Safe for Deployment' : 'Deployment Safeguards Triggered'}
+                    </div>
+                    <div class="waste-info">
+                        <span class="waste-val font-mono">${data.waste_score || 0}</span>
+                        <span class="waste-threshold font-mono">/ WASTE SCORE (THRESHOLD: 80.0)</span>
+                    </div>
+                    <div class="decision-explanation">
+                        <strong>AI Insights:</strong> ${escapeHtml(data.ai_explanation || 'Awaiting metrics evaluation...')}
+                    </div>
+                </div>
+            </div>
+        `;
+        renderWasteChart(data.waste_score || 0);
+        refreshLucide();
     }
 })();

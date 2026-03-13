@@ -13,6 +13,44 @@
 </head>
 
 <body>
+    <!-- ======== Animated Background ======== -->
+    <div class="bg-container">
+        <div class="orb orb-cyan"></div>
+        <div class="orb orb-indigo"></div>
+        <div class="star-field" id="star-field"></div>
+        <div class="bg-grid"></div>
+        <div class="bg-noise"></div>
+    </div>
+
+    <!-- ======== Sidebar Navigation ======== -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon"><i data-lucide="zap" class="text-glow-cyan"></i></div>
+            <span class="logo-text font-display">SwiftDeploy</span>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <button class="side-link nav-link active" data-page="dashboard" title="Dashboard">
+                <i data-lucide="activity" class="side-icon"></i>
+                <span class="side-label">Dashboard</span>
+            </button>
+            <button class="side-link nav-link" data-page="history" title="History">
+                <i data-lucide="clock" class="side-icon"></i>
+                <span class="side-label">History</span>
+            </button>
+            <button class="side-link nav-link" data-page="logs" title="System Logs">
+                <i data-lucide="shield-alert" class="side-icon"></i>
+                <span class="side-label">System Logs</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="system-status">
+                <div class="status-dot"></div>
+                <span class="font-mono" style="font-size: 10px;">SYSTEM ONLINE</span>
+            </div>
+        </div>
+    </aside>
 
     <!-- ======== Top Navigation ======== -->
     <nav class="top-nav">
@@ -54,20 +92,54 @@
                 <p class="page-subtitle">Real-time CI/CD pipeline monitoring and observability</p>
             </div>
 
+            <!-- AI Deployment Decision -->
+            <div class="section-title">
+                <span class="section-icon">🤖</span> Governance Decision
+            </div>
+            <div id="decision-panel-container" class="mb-24">
+                <!-- Rendered by JS -->
+            </div>
+
             <!-- Global Metrics -->
+            <div class="section-title">
+                <span class="section-icon">📊</span> Execution Summary
+            </div>
             <div id="metrics-grid" class="metrics-grid">
                 <!-- Summary cards added here via JS enhancement or staticly if preferred -->
-                <!-- The existing metrics-grid already exists, I will enhance it via CSS/JS -->
+            </div>
+
+            <!-- System Resources -->
+            <div class="section-title mt-16">
+                <span class="section-icon">⚙️</span> System Resources
+            </div>
+            <div id="system-metrics-grid" class="metrics-grid">
+                <!-- Rendered by JS -->
             </div>
 
             <!-- Active Pipelines -->
-            <div class="section-title">
-                <span class="section-icon">🔄</span> Active Pipelines
+            <div class="section-title mt-16">
+                <span class="section-icon">🚀</span> Active Pipelines
             </div>
             <div id="active-pipelines" class="pipeline-list">
-                <div class="empty-state">
-                    <div class="empty-state-icon">⏳</div>
-                    <div class="empty-state-text">Loading active pipelines...</div>
+                <!-- Active pipelines added here via JS -->
+            </div>
+
+            <!-- Advanced Analytics -->
+            <div class="section-title mt-16">
+                <span class="section-icon">📈</span> Advanced Analytics
+            </div>
+            <div class="charts-grid">
+                <div class="chart-card glass-pane">
+                    <h3 class="chart-title font-display"><i data-lucide="cpu" size="16"></i> Resource Utilization (CPU/RAM)</h3>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="resourceChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-pane">
+                    <h3 class="chart-title font-display"><i data-lucide="bar-chart" size="16"></i> Waste Score Breakdown</h3>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="wasteChart"></canvas>
+                    </div>
                 </div>
             </div>
 
