@@ -1,24 +1,26 @@
-from flask import Flask, render_template, request, jsonify
-import sqlite3
 import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from flask import Flask, render_template, request, jsonify, send_file # type: ignore
+from typing import Dict, Any, List, Optional, cast
+import sqlite3
 import json
 import uuid
 import random
 from datetime import datetime, timedelta, timezone
-from fpdf import FPDF
-from fpdf.enums import XPos, YPos
+from fpdf import FPDF # type: ignore
+from fpdf.enums import XPos, YPos # type: ignore
 import io
 
-import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from services.metrics.collector import MetricsCollector
-from services.governance.decision_engine import evaluate_build
-from services.reports.report_builder import ReportBuilder
-from services.explainer.log_parser import parse_pytest_failure
-from integrations.github.webhook import parse_webhook_payload
-from integrations.jenkins.client import JenkinsClient
-from services.jenkins_service import JenkinsService
+from services.metrics.collector import MetricsCollector # type: ignore
+from services.governance.decision_engine import evaluate_build # type: ignore
+from services.reports.report_builder import ReportBuilder # type: ignore
+from services.explainer.log_parser import parse_pytest_failure # type: ignore
+from integrations.github.webhook import parse_webhook_payload # type: ignore
+from integrations.jenkins.client import JenkinsClient # type: ignore
+from services.jenkins_service import JenkinsService # type: ignore
+from services.reports.intelligence_report import IntelligenceReportGenerator # type: ignore
 
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "dashboard", "templates"),
@@ -127,7 +129,7 @@ def get_db():
 
 def row_to_dict(row):
     if row is None:
-        return None
+        return {}
     return dict(row)
 
 
@@ -142,9 +144,10 @@ def calc_duration_seconds(start_str, end_str):
     try:
         s = datetime.fromisoformat(start_str)
         e = datetime.fromisoformat(end_str)
-        return round((e - s).total_seconds(), 2)
+        diff = (e - s).total_seconds()
+        return float(f"{diff:.2f}")
     except Exception:
-        return 0
+        return 0.0
 
 
 def build_stage_list(pipeline):
@@ -230,7 +233,7 @@ def api_evaluate():
 
         if test_status == "FAILED":
             explanation = parse_pytest_failure(log_text)
-            from services.explainer.log_parser import generate_failure_signature
+            from services.explainer.log_parser import generate_failure_signature # type: ignore
             failure_signature = generate_failure_signature(explanation)
             recurrence_count = get_failure_recurrence(failure_signature)
             explanation["failure_signature"] = failure_signature
@@ -272,15 +275,17 @@ def github_webhook():
     payload = request.json
     parsed_data = parse_webhook_payload(payload, event_type)
     
-    repo = parsed_data.get("repository", "unknown")
-    branch = parsed_data.get("branch", "unknown")
-    commit = parsed_data.get("commit_id", "none")[:8]
+    repo = str(parsed_data.get("repository", "unknown"))
+    branch = str(parsed_data.get("branch", "unknown"))
+    commit_full = str(parsed_data.get("commit_id", "none"))
+    commit = "{:.8}".format(commit_full)
     
     print(f"[Webhook] Received GitHub {event_type} event for {repo} ({branch}) @ {commit}")
 
     # Create a new pipeline record
     # Since we can't pass the ID to Jenkins anymore, we'll prefix it so we know it was webhook-triggered
-    pipeline_id = f"WEBHOOK-{uuid.uuid4().hex[:6].upper()}"
+    hex_val = str(uuid.uuid4().hex).upper()
+    pipeline_id = "WEBHOOK-{:.6}".format(hex_val)
     conn = get_db()
     conn.execute("""
         INSERT INTO pipelines (pipeline_id, repository, branch, commit_id, commit_author, commit_message, status, created_at, updated_at)
@@ -605,8 +610,8 @@ def pipelines_metrics():
             SELECT stage_{key}_start, stage_{key}_end FROM pipelines
             WHERE stage_{key}_start IS NOT NULL AND stage_{key}_end IS NOT NULL
         """).fetchall()
-        durs = [calc_duration_seconds(r[f"stage_{key}_start"], r[f"stage_{key}_end"]) for r in rows]
-        stage_averages[key] = round(sum(durs) / len(durs), 2) if durs else 0
+        durs = [float(calc_duration_seconds(r[f"stage_{key}_start"], r[f"stage_{key}_end"])) for r in rows]
+        stage_averages[key] = float(f"{sum(durs) / len(durs):.2f}") if durs else 0.0
 
     # Build Frequency (Last 7 days)
     frequency_rows = conn.execute("""
@@ -639,7 +644,7 @@ def pipelines_metrics():
         "failed_builds": failed,
         "blocked_deployments": blocked,
         "active_pipelines": active,
-        "avg_pipeline_duration": round(avg_duration, 2),
+        "avg_pipeline_duration": float(f"{avg_duration:.2f}"),
         "avg_test_duration": stage_averages.get("test", 0),
         "avg_build_duration": stage_averages.get("build", 0),
         
@@ -654,12 +659,12 @@ def pipelines_metrics():
             "total": deploy_total,
             "success": deploy_success,
             "failed": deploy_total - deploy_success,
-            "rate": round(deploy_rate, 1)
+            "rate": float(f"{deploy_rate:.1f}")
         },
         "health_score": health_score,
         "test_stats": {
             "total_executed": sum(r['tests_pass'] + r['tests_fail'] for r in history_trend),
-            "avg_pass_rate": round(sum(r['tests_pass'] for r in history_trend) / sum(r['tests_pass'] + r['tests_fail'] if (r['tests_pass'] + r['tests_fail']) > 0 else 1 for r in history_trend) * 100, 1) if history_trend else 0
+            "avg_pass_rate": float(f"{(float(sum(r['tests_pass'] for r in history_trend)) / float(max(1, sum(r['tests_pass'] + r['tests_fail'] for r in history_trend))) * 100):.1f}") if history_trend else 0.0
         }
     })
 
@@ -671,9 +676,24 @@ def pipeline_details(pipeline_db_id):
     conn.close()
     if not row:
         return jsonify({"error": "Pipeline not found"}), 404
-    pipeline = row_to_dict(row)
-    pipeline["stages"] = build_stage_list(pipeline)
+    pipeline = cast(Dict[str, Any], row_to_dict(row))
+    if pipeline:
+        pipeline["stages"] = build_stage_list(pipeline)
     return jsonify(pipeline)
+
+
+@app.route("/api/pipelines/intelligence/<int:pipeline_db_id>")
+def pipeline_intelligence(pipeline_db_id):
+    """Returns the enhanced CI/CD intelligence report in JSON format."""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM pipelines WHERE id = ?", (pipeline_db_id,)).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({"error": "Pipeline not found"}), 404
+    
+    generator = IntelligenceReportGenerator(row_to_dict(row))
+    report = generator.generate()
+    return jsonify(report)
 
 
 @app.route("/build/<int:pipeline_db_id>")
@@ -685,8 +705,9 @@ def build_details_page(pipeline_db_id):
     if not row:
         return "Build not found", 404
     
-    pipeline = row_to_dict(row)
-    pipeline["stages"] = build_stage_list(pipeline)
+    pipeline = cast(Dict[str, Any], row_to_dict(row))
+    if pipeline:
+        pipeline["stages"] = build_stage_list(pipeline)
     return render_template("build_details.html", pipeline=pipeline)
 
 
@@ -734,12 +755,12 @@ def download_pdf_report(pipeline_db_id):
     pdf.set_font("Helvetica", '', 10)
     
     data_summary = [
-        ["Pipeline ID", p["pipeline_id"]],
-        ["Repository", p["repository"] or "N/A"],
-        ["Branch", p["branch"] or "N/A"],
-        ["Commit", (p["commit_id"] or "N/A")[:12]],
-        ["Author", p["commit_author"] or "N/A"],
-        ["Status", (p["status"] or "waiting").upper()],
+        ["Pipeline ID", str(p.get("pipeline_id", "N/A"))],
+        ["Repository", str(p.get("repository", "N/A"))],
+        ["Branch", str(p.get("branch", "N/A"))],
+        ["Commit", "{:.12}".format(str(p.get("commit_id", "N/A")))],
+        ["Author", str(p.get("commit_author", "N/A"))],
+        ["Status", str(p.get("status", "waiting")).upper()],
         ["Duration", f"{p['total_pipeline_duration'] or 0}s"]
     ]
     
@@ -759,29 +780,57 @@ def download_pdf_report(pipeline_db_id):
     
     pdf.set_font("Helvetica", '', 10)
     for s in stages:
-        pdf.cell(60, 8, s["name"], border=1)
+        stage_status = str(s.get("status", "waiting") or "waiting").upper()
+        pdf.cell(60, 8, str(s["name"]), border=1)
         pdf.cell(40, 8, f"{s['duration']}s", border=1)
-        pdf.cell(0, 8, (s["status"] or "waiting").upper(), border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(0, 8, stage_status, border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
     pdf.ln(10)
     
-    # Governance & Failures
-    if p["governance_decision"] or p["failure_stage"]:
-        pdf.set_font("Helvetica", 'B', 12)
-        pdf.cell(0, 10, "3. Analysis & Governance", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-        pdf.set_font("Helvetica", '', 10)
-        
-        if p["governance_decision"]:
-            pdf.multi_cell(0, 8, f"Governance Decision: {p['governance_decision']}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.multi_cell(0, 8, f"Explanation: {p['governance_explanation'] or 'N/A'}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.ln(5)
-            
-        if p["failure_stage"]:
-            pdf.set_text_color(200, 0, 0)
-            pdf.multi_cell(0, 8, f"FAILURE at {p['failure_stage']} stage", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-            pdf.set_text_color(0, 0, 0)
-            pdf.multi_cell(0, 8, f"Reason: {p['failure_explanation'] or 'N/A'}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    # Governance & Analysis
+    pdf.set_font("Helvetica", 'B', 12)
+    pdf.cell(0, 10, "3. Intelligence Analysis", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     
+    generator = IntelligenceReportGenerator(p)
+    report = generator.generate()
+    
+    # Executive Summary in PDF
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(0, 8, f"Executive Summary: {report['executive_summary']['overall_result']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    for highlight in report['executive_summary']['key_highlights']:
+        pdf.multi_cell(0, 6, f"- {highlight}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.ln(5)
+    
+    # Governance
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(0, 8, "Governance Decision", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    pdf.multi_cell(0, 6, f"Decision: {report['governance_report']['governance_decision']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.multi_cell(0, 6, f"Waste Score: {report['governance_report']['waste_score']} ({report['governance_report']['waste_score_classification']})", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.multi_cell(0, 6, f"Reason: {report['governance_report']['reason']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    pdf.ln(5)
+    
+    # Insights
+    pdf.set_font("Helvetica", 'B', 10)
+    pdf.cell(0, 8, "Intelligence Insights", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.set_font("Helvetica", '', 10)
+    for obs in report['intelligence_insights']['observations']:
+        pdf.multi_cell(0, 6, f"- {obs}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    
+    # Failures if any
+    if report['failure_analysis']:
+        pdf.ln(5)
+        pdf.set_font("Helvetica", 'B', 10)
+        pdf.set_text_color(200, 0, 0)
+        pdf.cell(0, 8, f"Failure Analysis ({report['failure_analysis']['failure_stage']})", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_font("Helvetica", '', 10)
+        pdf.multi_cell(0, 6, f"Error: {report['failure_analysis']['error_message']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.multi_cell(0, 6, f"Suggested Fix: {report['failure_analysis']['suggested_fixes']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_text_color(0, 0, 0)
+
     # Send Binary
     buffer = io.BytesIO()
     pdf_output = pdf.output()
@@ -791,12 +840,11 @@ def download_pdf_report(pipeline_db_id):
         buffer.write(pdf_output)
     
     buffer.seek(0)
-    from flask import send_file
     return send_file(
         buffer,
         mimetype='application/pdf',
         as_attachment=True,
-        download_name=f"report_{p['pipeline_id']}.pdf"
+        download_name=f"report_{str(cast(dict, p).get('pipeline_id', 'unknown'))}.pdf"
     )
 
 
