@@ -474,6 +474,8 @@
                         <span class="pipeline-meta-item"><i data-lucide="calendar" size="12"></i> ${createdFormatted}</span>
                         <span class="pipeline-meta-item"><i data-lucide="clock" size="12"></i> ${duration}</span>
                         <span class="pipeline-meta-item"><i data-lucide="zap" size="12"></i> Waste: ${p.waste_score !== null ? p.waste_score : '—'}</span>
+                        ${p.cpu_usage > 0 ? `<span class="pipeline-meta-item"><i data-lucide="cpu" size="12"></i> CPU: ${p.cpu_usage}%</span>` : ''}
+                        ${p.memory_usage > 0 ? `<span class="pipeline-meta-item"><i data-lucide="database" size="12"></i> RAM: ${p.memory_usage}%</span>` : ''}
                         <span class="pipeline-meta-item"><i data-lucide="shield" size="12"></i> ${p.governance_decision || '—'}</span>
                     </div>
                     <div class="pipeline-commit-msg">"${escapeHtml(p.commit_message || '')}"</div>

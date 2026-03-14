@@ -32,51 +32,72 @@ class JenkinsService:
             
             pipeline_id = params.get("PIPELINE_ID") or f"PL-{build_num}"
             status = self._map_status(build)
-            
             if db_conn:
                 # Check if we have a record for this pipeline_id
-                existing = db_conn.execute("SELECT id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+                existing = db_conn.execute("SELECT id, commit_id, commit_author, commit_message FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
                 
+                # Fetch commit metadata from Jenkins if possible
+                commit_info = {}
+                try:
+                    # Tree query for performance
+                    meta_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1],remoteUrls],changeSets[items[commitId,author[fullName],msg]]"
+                    import requests
+                    meta_res = requests.get(meta_url, auth=self.client.auth)
+                    if meta_res.status_code == 200:
+                        meta_data = meta_res.json()
+                        # Get SHA from actions
+                        for action in meta_data.get("actions", []):
+                            if action.get("lastBuiltRevision"):
+                                commit_info["id"] = action["lastBuiltRevision"].get("SHA1")
+                            if action.get("remoteUrls"):
+                                commit_info["repo"] = action["remoteUrls"][0]
+                        
+                        # Get details from changeSets if it's the first build of a push
+                        cs = meta_data.get("changeSets", [])
+                        if cs and cs[0].get("items"):
+                            last_item = cs[0]["items"][0]
+                            commit_info["author"] = last_item.get("author", {}).get("fullName")
+                            commit_info["message"] = last_item.get("msg")
+                            if not commit_info.get("id"):
+                                commit_info["id"] = last_item.get("commitId")
+                except Exception as e:
+                    print(f"[Sync Metadata Error] {e}")
+
                 if existing:
-                    # Update status and duration if it's still running or just finished
+                    # Update status, duration and metadata if missing
                     db_conn.execute("""
                         UPDATE pipelines 
                         SET status = ?, 
                             total_pipeline_duration = ?,
-                            updated_at = ?
+                            updated_at = ?,
+                            commit_id = COALESCE(commit_id, ?),
+                            commit_author = COALESCE(commit_author, ?),
+                            commit_message = COALESCE(commit_message, ?),
+                            repository = COALESCE(repository, ?)
                         WHERE pipeline_id = ?
                     """, (
                         status, 
                         build.get("duration", 0) / 1000.0,
                         datetime.now(timezone.utc).isoformat(),
+                        commit_info.get("id"),
+                        commit_info.get("author"),
+                        commit_info.get("message"),
+                        commit_info.get("repo"),
                         pipeline_id
                     ))
                 else:
-                    # Check if there's a queued webhook record for this commit before creating a new one
-                    import requests
-                    commit_info = requests.get(f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1]]", auth=self.client.auth).json()
-                    sha = None
-                    for action in commit_info.get("actions", []):
-                        if action.get("lastBuiltRevision"):
-                            sha = action["lastBuiltRevision"].get("SHA1")
-                    
-                    if sha:
-                        webhook_record = db_conn.execute("SELECT id FROM pipelines WHERE commit_id = ? AND status = 'queued'", (sha,)).fetchone()
-                        if webhook_record:
-                            # Link it now instead of creating duplicate
-                            db_conn.execute("UPDATE pipelines SET pipeline_id = ?, status = ? WHERE id = ?", (pipeline_id, status, webhook_record[0]))
-                            db_conn.commit()
-                            continue
-
-                    # Create new record for untracked (e.g. manual) build
+                    # Create new record with metadata
                     db_conn.execute("""
-                        INSERT INTO pipelines (pipeline_id, repository, branch, status, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO pipelines (pipeline_id, repository, branch, status, commit_id, commit_author, commit_message, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         pipeline_id,
-                        self.job_name,
+                        commit_info.get("repo") or self.job_name,
                         params.get("BRANCH", "main"),
                         status,
+                        commit_info.get("id"),
+                        commit_info.get("author"),
+                        commit_info.get("message"),
                         self._format_ts(build.get("timestamp")),
                         datetime.now(timezone.utc).isoformat()
                     ))
