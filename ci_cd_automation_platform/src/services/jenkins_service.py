@@ -12,10 +12,32 @@ class JenkinsService:
 
     def sync_pipelines(self, db_conn=None):
         """Fetch latest builds from Jenkins and sync them into our local database."""
+        if not db_conn:
+            return
+
         raw_builds = self.client.get_build_list(self.job_name)
+        active_build_nums = {b['number'] for b in raw_builds}
         
-        for build in raw_builds[:10]:
-            build_num = build['number']
+        # Also find all builds in our DB that are currently 'queued' or 'running'
+        # to ensure we check their specific status even if they rolled off the top 10 list
+        active_local_ids = db_conn.execute("SELECT pipeline_id FROM pipelines WHERE status IN ('queued', 'running', 'blocked')").fetchall()
+        for row in active_local_ids:
+            pid = row[0]
+            if pid.startswith("PL-"):
+                try:
+                    num = int(pid.split("-")[1])
+                    if num not in active_build_nums:
+                        # Fetch specific build status if it's missing from the main list
+                        build_status = self.client.get_build_status(self.job_name, num)
+                        if build_status:
+                            build_status['number'] = num
+                            raw_builds.append(build_status)
+                except:
+                    pass
+
+        for build in raw_builds:
+            build_num = build.get('number')
+            if not build_num: continue
             
             # Get full build details to extract parameters
             status_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json"
@@ -33,81 +55,76 @@ class JenkinsService:
             pipeline_id = params.get("PIPELINE_ID") or f"PL-{build_num}"
             status = self._map_status(build)
             
-            if db_conn:
-                # Check if we have a record for this pipeline_id
-                existing = db_conn.execute("SELECT id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
-                
-                # Fetch commit metadata from Jenkins if possible
-                commit_info = {}
-                try:
-                    # Tree query for performance
-                    meta_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1],remoteUrls],changeSets[items[commitId,author[fullName],msg]]"
-                    meta_res = requests.get(meta_url, auth=self.client.auth)
-                    if meta_res.status_code == 200:
-                        meta_data = meta_res.json()
-                        # Get SHA from actions
-                        for action in meta_data.get("actions", []):
-                            if action.get("lastBuiltRevision"):
-                                commit_info["id"] = action["lastBuiltRevision"].get("SHA1")
-                            if action.get("remoteUrls"):
-                                commit_info["repo"] = action["remoteUrls"][0]
-                        
-                        # Get details from changeSets if it's the first build of a push
-                        cs = meta_data.get("changeSets", [])
-                        if cs and cs[0].get("items"):
-                            last_item = cs[0]["items"][0]
-                            commit_info["author"] = last_item.get("author", {}).get("fullName")
-                            commit_info["message"] = last_item.get("msg")
-                            if not commit_info.get("id"):
-                                commit_info["id"] = last_item.get("commitId")
-                except Exception as e:
-                    print(f"[Sync Metadata Error] {e}")
+            # Check if we have a record for this pipeline_id
+            existing = db_conn.execute("SELECT id, status FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+            
+            # Fetch commit metadata from Jenkins if possible
+            commit_info = {}
+            try:
+                meta_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1],remoteUrls],changeSets[items[commitId,author[fullName],msg]]"
+                meta_res = requests.get(meta_url, auth=self.client.auth)
+                if meta_res.status_code == 200:
+                    meta_data = meta_res.json()
+                    for action in meta_data.get("actions", []):
+                        if action.get("lastBuiltRevision"):
+                            commit_info["id"] = action["lastBuiltRevision"].get("SHA1")
+                        if action.get("remoteUrls"):
+                            commit_info["repo"] = action["remoteUrls"][0]
+                    
+                    cs = meta_data.get("changeSets", [])
+                    if cs and cs[0].get("items"):
+                        last_item = cs[0]["items"][0]
+                        commit_info["author"] = last_item.get("author", {}).get("fullName")
+                        commit_info["message"] = last_item.get("msg")
+                        if not commit_info.get("id"):
+                            commit_info["id"] = last_item.get("commitId")
+            except Exception as e:
+                print(f"[Sync Metadata Error] {e}")
 
-                if existing:
-                    # Update status, duration and metadata if missing
-                    # Protection: If local DB already says 'running', don't set it back to 'queued'
-                    current_status = db_conn.execute("SELECT status FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()[0]
-                    new_status = status
-                    if current_status == 'running' and status == 'queued':
-                        new_status = 'running'
+            if existing:
+                current_status = existing[1]
+                new_status = status
+                # Protection: If local DB already says 'running', only update if Jenkins says it's finished
+                if current_status == 'running' and status == 'queued':
+                    new_status = 'running'
 
-                    db_conn.execute("""
-                        UPDATE pipelines 
-                        SET status = ?, 
-                            total_pipeline_duration = ?,
-                            updated_at = ?,
-                            commit_id = COALESCE(commit_id, ?),
-                            commit_author = COALESCE(commit_author, ?),
-                            commit_message = COALESCE(commit_message, ?),
-                            repository = COALESCE(repository, ?)
-                        WHERE pipeline_id = ?
-                    """, (
-                        new_status, 
-                        build.get("duration", 0) / 1000.0,
-                        datetime.now(timezone.utc).isoformat(),
-                        commit_info.get("id"),
-                        commit_info.get("author"),
-                        commit_info.get("message"),
-                        commit_info.get("repo"),
-                        pipeline_id
-                    ))
-                else:
-                    # Create new record with metadata
-                    db_conn.execute("""
-                        INSERT INTO pipelines (pipeline_id, repository, branch, status, commit_id, commit_author, commit_message, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        pipeline_id,
-                        commit_info.get("repo") or self.job_name,
-                        params.get("BRANCH", "main"),
-                        status,
-                        commit_info.get("id"),
-                        commit_info.get("author"),
-                        commit_info.get("message"),
-                        self._format_ts(build.get("timestamp")),
-                        datetime.now(timezone.utc).isoformat()
-                    ))
-                db_conn.commit()
+                db_conn.execute("""
+                    UPDATE pipelines 
+                    SET status = ?, 
+                        total_pipeline_duration = ?,
+                        updated_at = ?,
+                        commit_id = COALESCE(commit_id, ?),
+                        commit_author = COALESCE(commit_author, ?),
+                        commit_message = COALESCE(commit_message, ?),
+                        repository = COALESCE(repository, ?)
+                    WHERE pipeline_id = ?
+                """, (
+                    new_status, 
+                    build.get("duration", 0) / 1000.0,
+                    datetime.now(timezone.utc).isoformat(),
+                    commit_info.get("id"),
+                    commit_info.get("author"),
+                    commit_info.get("message"),
+                    commit_info.get("repo"),
+                    pipeline_id
+                ))
+            else:
+                # Create new record with metadata
+                db_conn.execute("""
+                    INSERT INTO pipelines (pipeline_id, repository, branch, status, commit_id, commit_author, commit_message, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    pipeline_id,
+                    commit_info.get("repo") or self.job_name,
+                    params.get("BRANCH", "main"),
+                    status,
+                    commit_info.get("id"),
+                    commit_info.get("author"),
+                    commit_info.get("message"),
+                    self._format_ts(build.get("timestamp")),
+                    datetime.now(timezone.utc).isoformat()
+                ))
+            db_conn.commit()
 
     def _map_status(self, build):
         if build.get("building"):

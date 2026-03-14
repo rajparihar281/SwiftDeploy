@@ -27,9 +27,9 @@ pipeline {
                         env.GIT_BRANCH = scmVars.GIT_BRANCH ?: bat(script: "@git rev-parse --abbrev-ref HEAD", returnStdout: true).trim()
                         env.GIT_URL = scmVars.GIT_URL ?: bat(script: "@git config --get remote.origin.url", returnStdout: true).trim()
                         
-                        // Capture author and message
-                        env.GIT_AUTHOR = bat(script: "@git log -1 --pretty=format:%an", returnStdout: true).trim()
-                        env.GIT_MESSAGE = bat(script: "@git log -1 --pretty=format:%s", returnStdout: true).trim()
+                        // Capture author and message (escaped % for bat)
+                        env.GIT_AUTHOR = bat(script: "@git log -1 --pretty=format:%%an", returnStdout: true).trim()
+                        env.GIT_MESSAGE = bat(script: "@git log -1 --pretty=format:%%s", returnStdout: true).trim()
 
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         

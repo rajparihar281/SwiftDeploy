@@ -1158,36 +1158,57 @@
 
         const statusLower = (data.decision || 'N/A').toLowerCase();
         let statusClass = 'status-delayed';
-        let icon = 'alert-triangle';
+        let icon = 'shield-alert';
+        let bgGradient = 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%)';
+        let accentColor = '#f59e0b';
 
-        if (statusLower === 'approved') {
+        if (statusLower === 'approved' || statusLower === 'allow') {
             statusClass = 'status-approved';
-            icon = 'check-circle-2';
+            icon = 'shield-check';
+            bgGradient = 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0.05) 100%)';
+            accentColor = '#10b981';
         } else if (statusLower === 'blocked' || statusLower === 'block') {
             statusClass = 'status-blocked';
-            icon = 'x-circle';
+            icon = 'shield-x';
+            bgGradient = 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)';
+            accentColor = '#ef4444';
         }
 
         container.innerHTML = `
-            <div class="decision-panel glass-pane ${statusClass}">
-                <div class="decision-glow"></div>
-                <div class="decision-icon-wrap">
-                    <i data-lucide="${icon}" class="text-glow-${statusClass.split('-')[1]}"></i>
+            <div class="decision-panel-v2 ${statusClass}" style="background: ${bgGradient}; border: 1px solid ${accentColor}33; border-radius: 16px; padding: 24px; position: relative; overflow: hidden; display: flex; align-items: flex-start; gap: 24px;">
+                <div class="decision-glow" style="position: absolute; top: -50px; left: -50px; width: 150px; height: 150px; background: ${accentColor}; filter: blur(80px); opacity: 0.15; pointer-events: none;"></div>
+                
+                <div class="decision-icon-wrap-v2" style="background: ${accentColor}22; border: 1px solid ${accentColor}44; border-radius: 12px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i data-lucide="${icon}" size="32" style="color: ${accentColor}; filter: drop-shadow(0 0 8px ${accentColor}66);"></i>
                 </div>
-                <div class="decision-content">
-                    <div class="decision-status-badge">
-                        <i data-lucide="${icon}" size="14"></i>
-                        Status: ${data.decision || 'PENDING'}
+
+                <div class="decision-content" style="flex-grow: 1;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px;">
+                        <div>
+                            <div style="font-size: 11px; color: ${accentColor}; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px;">Guardrails System</div>
+                            <h2 style="font-size: 20px; font-weight: 700; color: #fff; margin: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+                                ${statusLower === 'approved' || statusLower === 'allow' ? 'Deployment Validated & Authorized' : 'Deployment Safeguards Triggered'}
+                            </h2>
+                        </div>
+                        <div class="status-badge status-${statusClass.split('-')[1]}" style="font-weight: 700; font-size: 10px; padding: 4px 10px; border-radius: 100px; display: flex; align-items: center; gap: 6px;">
+                            <span class="status-pulse" style="width: 6px; height: 6px; background: currentColor; border-radius: 50%;"></span>
+                            STATUS: ${statusLower === 'allow' ? 'APPROVED' : statusLower.toUpperCase()}
+                        </div>
                     </div>
-                    <div class="decision-msg font-display">
-                        ${data.decision === 'APPROVED' ? 'System Safe for Deployment' : 'Deployment Safeguards Triggered'}
+
+                    <div class="waste-metric-row" style="display: flex; align-items: center; gap: 16px; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.05);">
+                        <div class="waste-value-box">
+                            <span style="font-size: 32px; font-weight: 800; color: #fff; font-family: var(--font-mono);">${data.waste_score || 0}</span>
+                            <span style="font-size: 12px; color: var(--text-muted); margin-left: 8px; text-transform: uppercase; letter-spacing: 1px;">Waste Score Index</span>
+                        </div>
+                        <div style="height: 24px; width: 1px; background: rgba(255,255,255,0.1);"></div>
+                        <div class="threshold-info" style="font-size: 12px; color: var(--text-muted);">
+                            Maximum Allowed Value: <span style="color: #fff; font-weight: 600;">80.00</span>
+                        </div>
                     </div>
-                    <div class="waste-info">
-                        <span class="waste-val font-mono">${data.waste_score || 0}</span>
-                        <span class="waste-threshold font-mono">/ WASTE SCORE (THRESHOLD: 80.0)</span>
-                    </div>
-                    <div class="decision-explanation">
-                        <strong>Insights:</strong> ${escapeHtml(data.ai_explanation || 'Awaiting metrics evaluation...')}
+
+                    <div class="decision-explanation-v2" style="margin-top: 16px; padding: 12px 16px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 3px solid ${accentColor}; font-size: 13px; color: var(--text-secondary); line-height: 1.6;">
+                        <span style="color: #fff; font-weight: 600;">Insights:</span> ${escapeHtml(data.ai_explanation || 'Decision based on automated governance rules.')}
                     </div>
                 </div>
             </div>
