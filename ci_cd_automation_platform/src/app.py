@@ -435,10 +435,17 @@ def pipeline_report():
 
 @app.route("/api/metrics")
 def api_metrics():
-    """Fetch real-time CPU, RAM, Disk, and Build Time."""
+    """Fetch real-time CPU, RAM, Disk, and average Build Time from history."""
     try:
         collector = MetricsCollector()
         metrics = collector.collect_metrics()
+        
+        # Override stateless build_time with historical average from database
+        conn = get_db()
+        avg_build_time = conn.execute("SELECT AVG(total_pipeline_duration) FROM pipelines WHERE status = 'success'").fetchone()[0]
+        conn.close()
+        
+        metrics["build_time"] = round(avg_build_time, 2) if avg_build_time else 0
         return jsonify(metrics)
     except Exception as e:
         import traceback

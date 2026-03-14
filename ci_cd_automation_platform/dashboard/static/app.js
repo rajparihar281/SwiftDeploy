@@ -1131,10 +1131,10 @@
         if (!container) return;
 
         const metrics = [
-            { label: 'CPU Usage', val: data.cpu, unit: '%', icon: 'cpu', color: 'cyan' },
-            { label: 'RAM Usage', val: data.memory, unit: '%', icon: 'memory-stick', color: 'emerald' },
-            { label: 'Disk Space', val: data.disk, unit: '%', icon: 'hard-drive', color: 'amber' },
-            { label: 'Build Time', val: data.build_time, unit: 's', icon: 'clock', color: 'crimson' }
+            { label: 'CPU Usage', val: data.cpu, unit: '%', icon: 'cpu', color: 'cyan', showProgress: true },
+            { label: 'RAM Usage', val: data.memory, unit: '%', icon: 'memory-stick', color: 'emerald', showProgress: true },
+            { label: 'Disk Space', val: data.disk, unit: '%', icon: 'hard-drive', color: 'amber', showProgress: true },
+            { label: 'Build Time', val: data.build_time, unit: 's', icon: 'clock', color: 'crimson', showProgress: false }
         ];
 
         container.innerHTML = metrics.map(m => `
@@ -1142,9 +1142,10 @@
                 <div class="metric-icon-bg"><i data-lucide="${m.icon}" size="18"></i></div>
                 <div class="metric-label font-display">${m.label}</div>
                 <div class="metric-value font-mono text-glow-${m.color}">${m.val}<span class="metric-unit">${m.unit}</span></div>
+                ${m.showProgress ? `
                 <div class="progress-bar-wrap">
                     <div class="progress-bar-fill" style="width: ${m.val}%; background-color: var(--color-neon-${m.color});"></div>
-                </div>
+                </div>` : '<div class="metric-status-text font-display" style="font-size: 10px; margin-top: 8px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">Historical Average</div>'}
             </div>
         `).join('');
         renderResourceChart(data.cpu, data.memory);

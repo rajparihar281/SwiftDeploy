@@ -65,6 +65,12 @@ class JenkinsService:
 
                 if existing:
                     # Update status, duration and metadata if missing
+                    # Protection: If local DB already says 'running', don't set it back to 'queued'
+                    current_status = db_conn.execute("SELECT status FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()[0]
+                    new_status = status
+                    if current_status == 'running' and status == 'queued':
+                        new_status = 'running'
+
                     db_conn.execute("""
                         UPDATE pipelines 
                         SET status = ?, 
@@ -76,7 +82,7 @@ class JenkinsService:
                             repository = COALESCE(repository, ?)
                         WHERE pipeline_id = ?
                     """, (
-                        status, 
+                        new_status, 
                         build.get("duration", 0) / 1000.0,
                         datetime.now(timezone.utc).isoformat(),
                         commit_info.get("id"),
