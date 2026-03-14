@@ -276,9 +276,9 @@ pipeline {
                             projectDir = projectDir.substring(1)
                         }
 
-                        def deployPort = 6000
-                        if (projectDir.contains("blocked")) deployPort = 7000
-                        else if (projectDir.contains("allowed")) deployPort = 6000
+                        def deployPort = 6001
+                        if (projectDir.contains("blocked")) deployPort = 7001
+                        else if (projectDir.contains("allowed")) deployPort = 6001
                         else {
                             // Dynamic port for other projects to avoid collision
                             deployPort = 8000 + (env.BUILD_ID.toInteger() % 1000)
