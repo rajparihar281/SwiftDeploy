@@ -96,6 +96,10 @@ def init_db():
         deployed_url TEXT,
 
         total_pipeline_duration REAL DEFAULT 0,
+        waste_score REAL DEFAULT 0,
+        cpu_usage REAL DEFAULT 0,
+        memory_usage REAL DEFAULT 0,
+        disk_usage REAL DEFAULT 0,
         governance_decision TEXT,
         governance_explanation TEXT,
         failure_stage TEXT,
@@ -236,6 +240,16 @@ def api_evaluate():
         report["ai_explanation"] = explanation
         report["failure_signature"] = failure_signature
         ReportBuilder.save_to_database(report)
+
+        # Also update the latest pipeline record if pipeline_id is provided
+        pipeline_id = data.get("pipeline_id")
+        if pipeline_id:
+            conn = get_db()
+            conn.execute("UPDATE pipelines SET waste_score = ?, governance_decision = ?, governance_explanation = ? WHERE pipeline_id = ?", 
+                         (decision_data['waste_score'], decision_data['decision'], report.get('governance_explanation', ''), pipeline_id))
+            conn.commit()
+            conn.close()
+
         return jsonify(report)
     except Exception as e:
         import traceback
@@ -385,8 +399,10 @@ def pipeline_report():
             "stage_build_start", "stage_build_end", "stage_build_status", "image_size",
             "stage_deploy_start", "stage_deploy_end", "stage_deploy_status", "container_health",
             "deployed_port", "deployed_url",
-            "total_pipeline_duration", "governance_decision", "governance_explanation",
+            "total_pipeline_duration", "waste_score", "cpu_usage", "memory_usage", "disk_usage",
+            "governance_decision", "governance_explanation",
             "failure_stage", "failure_explanation", "failure_log_snippet",
+            "commit_id", "commit_author", "commit_message", "repository", "branch"
         ]
 
         for field in field_map:

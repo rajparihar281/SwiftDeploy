@@ -79,7 +79,7 @@
         switch (page) {
             case 'dashboard':
                 await Promise.all([
-                    loadMetrics(), 
+                    loadMetrics(),
                     loadActivePipelines(),
                     loadActiveDeployments(),
                     loadSystemMetrics(),
@@ -180,7 +180,7 @@
 
         const maxPoints = 20;
         const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        
+
         state.resourceHistory.labels.push(now);
         state.resourceHistory.cpu.push(cpu);
         state.resourceHistory.ram.push(ram);
@@ -473,7 +473,7 @@
                         <span class="pipeline-meta-item"><i data-lucide="user" size="12"></i> ${escapeHtml(p.commit_author || '—')}</span>
                         <span class="pipeline-meta-item"><i data-lucide="calendar" size="12"></i> ${createdFormatted}</span>
                         <span class="pipeline-meta-item"><i data-lucide="clock" size="12"></i> ${duration}</span>
-                        <span class="pipeline-meta-item"><i data-lucide="zap" size="12"></i> Waste: ${p.governance_explanation && p.governance_explanation.includes('Waste Score:') ? p.governance_explanation.match(/Waste Score: ([\d.]+)/)[1] : '—'}</span>
+                        <span class="pipeline-meta-item"><i data-lucide="zap" size="12"></i> Waste: ${p.waste_score !== null ? p.waste_score : '—'}</span>
                         <span class="pipeline-meta-item"><i data-lucide="shield" size="12"></i> ${p.governance_decision || '—'}</span>
                     </div>
                     <div class="pipeline-commit-msg">"${escapeHtml(p.commit_message || '')}"</div>
@@ -868,7 +868,7 @@
         else gauge.classList.add('unstable');
 
         const successRate = m.total_builds ? Math.round((m.successful_builds / m.total_builds) * 100) : 0;
-        
+
         if (factors) {
             factors.innerHTML = `
                 <div class="health-item"><span>Pipeline Stability</span><span>${successRate}%</span></div>
@@ -1183,7 +1183,7 @@
                         <span class="waste-threshold font-mono">/ WASTE SCORE (THRESHOLD: 80.0)</span>
                     </div>
                     <div class="decision-explanation">
-                        <strong>AI Insights:</strong> ${escapeHtml(data.ai_explanation || 'Awaiting metrics evaluation...')}
+                        <strong>Insights:</strong> ${escapeHtml(data.ai_explanation || 'Awaiting metrics evaluation...')}
                     </div>
                 </div>
             </div>

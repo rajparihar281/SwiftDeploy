@@ -163,8 +163,19 @@ pipeline {
                         echo "Warning: Failed to fetch metrics, using defaults: ${err}"
                         env.METRICS_DATA = '{"cpu": 0, "memory": 0, "disk": 0, "build_time": 0}'
                     }
-                    def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
-                    reportStage('metrics', stageStart, stageEnd, 'completed')
+                        def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
+                        reportStage('metrics', stageStart, stageEnd, 'completed')
+                        
+                        // Report the metrics values for persistence
+                        def metrics = readJSON text: env.METRICS_DATA
+                        def body = JsonOutput.toJson([
+                            pipeline_id: env.PIPELINE_ID,
+                            cpu_usage: metrics.cpu,
+                            memory_usage: metrics.memory,
+                            disk_usage: metrics.disk,
+                            status: 'running'
+                        ])
+                        sendReport(body)
                 }
             }
         }
@@ -178,6 +189,7 @@ pipeline {
                         def response = httpRequest httpMode: 'POST',
                                                   contentType: 'APPLICATION_JSON',
                                                   requestBody: """{
+                                                      "pipeline_id": "${env.PIPELINE_ID}",
                                                       "metrics": ${metricsJson},
                                                       "test_status": "${env.TEST_STATUS}",
                                                       "log_text": ${JsonOutput.toJson(env.TEST_LOG)}
@@ -198,6 +210,7 @@ pipeline {
                             stage_governance_end: stageEnd,
                             stage_governance_status: govStatus,
                             governance_decision: result.decision,
+                            waste_score: result.waste_score,
                             governance_explanation: result.decision == "BLOCK" ?
                                 "Deployment blocked: ${result.violations}" :
                                 "All governance checks passed. Waste Score: ${result.waste_score}",
