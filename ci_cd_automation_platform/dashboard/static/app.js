@@ -394,8 +394,9 @@
                         </div>
                         <div class="pipeline-meta">
                             <span class="pipeline-meta-item"><i data-lucide="hash" size="12"></i> Build #${d.pipeline_id.split('-').pop()}</span>
+                            <span class="pipeline-meta-item text-mono"><i data-lucide="git-commit" size="12"></i> ${d.commit_id ? d.commit_id.substring(0, 8) : 'N/A'}</span>
+                            <span class="pipeline-meta-item"><i data-lucide="calendar" size="12"></i> ${d.updated_at ? formatTimestamp(d.updated_at) : 'N/A'}</span>
                             <span class="pipeline-meta-item"><i data-lucide="link" size="12"></i> Port: ${d.deployed_port}</span>
-                            <span class="pipeline-meta-item"><i data-lucide="activity" size="12"></i> Status: RUNNING</span>
                         </div>
                     </div>
                     <div class="pipeline-actions" style="margin-left: auto;">

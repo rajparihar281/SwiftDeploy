@@ -301,7 +301,7 @@ pipeline {
                         
                         echo "Deploying ${env.FULL_IMAGE_NAME} to port ${deployPort}..."
                         bat "docker rm -f ${containerName} || true"
-                        bat "docker run -d -p ${deployPort}:5000 --name ${containerName} ${env.FULL_IMAGE_NAME}:${env.DOCKER_TAG}"
+                        bat "docker run -d -p ${deployPort}:5000 -e BUILD_NUMBER=${env.BUILD_NUMBER} -e GIT_COMMIT=${env.GIT_COMMIT} --name ${containerName} ${env.FULL_IMAGE_NAME}:${env.DOCKER_TAG}"
                         
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         def deployedUrl = "http://localhost:${deployPort}"

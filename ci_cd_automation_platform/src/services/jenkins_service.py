@@ -32,16 +32,16 @@ class JenkinsService:
             
             pipeline_id = params.get("PIPELINE_ID") or f"PL-{build_num}"
             status = self._map_status(build)
+            
             if db_conn:
                 # Check if we have a record for this pipeline_id
-                existing = db_conn.execute("SELECT id, commit_id, commit_author, commit_message FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
+                existing = db_conn.execute("SELECT id FROM pipelines WHERE pipeline_id = ?", (pipeline_id,)).fetchone()
                 
                 # Fetch commit metadata from Jenkins if possible
                 commit_info = {}
                 try:
                     # Tree query for performance
                     meta_url = f"{self.url}/job/{self.job_name}/{build_num}/api/json?tree=actions[lastBuiltRevision[SHA1],remoteUrls],changeSets[items[commitId,author[fullName],msg]]"
-                    import requests
                     meta_res = requests.get(meta_url, auth=self.client.auth)
                     if meta_res.status_code == 200:
                         meta_data = meta_res.json()
