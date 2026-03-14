@@ -92,6 +92,8 @@ def init_db():
         stage_deploy_end TEXT,
         stage_deploy_status TEXT DEFAULT 'waiting',
         container_health TEXT,
+        deployed_port INTEGER,
+        deployed_url TEXT,
 
         total_pipeline_duration REAL DEFAULT 0,
         governance_decision TEXT,
@@ -179,6 +181,8 @@ def build_stage_list(pipeline):
             stage["image_size"] = pipeline.get("image_size", "")
         elif key == "deploy":
             stage["container_health"] = pipeline.get("container_health", "")
+            stage["deployed_port"] = pipeline.get("deployed_port")
+            stage["deployed_url"] = pipeline.get("deployed_url", "")
 
         stages.append(stage)
     return stages
@@ -380,6 +384,7 @@ def pipeline_report():
             "stage_governance_start", "stage_governance_end", "stage_governance_status",
             "stage_build_start", "stage_build_end", "stage_build_status", "image_size",
             "stage_deploy_start", "stage_deploy_end", "stage_deploy_status", "container_health",
+            "deployed_port", "deployed_url",
             "total_pipeline_duration", "governance_decision", "governance_explanation",
             "failure_stage", "failure_explanation", "failure_log_snippet",
         ]
@@ -417,11 +422,12 @@ def api_metrics():
     """Fetch real-time CPU, RAM, Disk, and Build Time."""
     try:
         collector = MetricsCollector()
-        # For demo purposes, we'll simulate a 0.1s interval to get a reading
         metrics = collector.collect_metrics()
         return jsonify(metrics)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e), "cpu": 0, "memory": 0, "disk": 0, "build_time": 0}), 500
 
 
 @app.route("/api/decision")
@@ -478,6 +484,23 @@ def pipelines_active():
         p["stages"] = build_stage_list(p)
         
     return jsonify(pipelines)
+
+
+@app.route("/api/deployments/active")
+def deployments_active():
+    """Returns all successfully deployed and active applications."""
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT * FROM pipelines 
+        WHERE status = 'success' 
+        AND stage_deploy_status = 'completed'
+        AND deployed_url IS NOT NULL
+        ORDER BY updated_at DESC
+    """).fetchall()
+    conn.close()
+    
+    deployments = rows_to_list(rows)
+    return jsonify(deployments)
 
 
 @app.route("/api/pipelines/history")

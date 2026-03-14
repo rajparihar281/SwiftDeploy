@@ -128,7 +128,7 @@
             <div class="section-title mt-16">
                 <span class="section-icon">📈</span> Advanced Analytics
             </div>
-            <div class="charts-grid">
+            <div class="charts-grid mb-24">
                 <div class="chart-card glass-pane">
                     <h3 class="chart-title font-display"><i data-lucide="cpu" size="16"></i> Resource Utilization (CPU/RAM)</h3>
                     <div class="chart-canvas-wrap">
@@ -140,6 +140,17 @@
                     <div class="chart-canvas-wrap">
                         <canvas id="wasteChart"></canvas>
                     </div>
+                </div>
+            </div>
+
+            <!-- Active Deployments -->
+            <div class="section-title mt-16">
+                <span class="section-icon">🌐</span> Active Deployments
+            </div>
+            <div id="active-deployments" class="pipeline-list mb-24">
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚢</div>
+                    <div class="empty-state-text">Scanning for active deployments...</div>
                 </div>
             </div>
 

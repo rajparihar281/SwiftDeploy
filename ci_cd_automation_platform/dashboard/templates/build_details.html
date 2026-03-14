@@ -229,6 +229,11 @@
                 </div>
             </div>
             <div class="details-actions">
+                {% if pipeline.deployed_url %}
+                <a href="{{ pipeline.deployed_url }}" target="_blank" class="btn-download" style="background: var(--status-success);">
+                    <i data-lucide="external-link" size="16"></i> Open Deployed Application
+                </a>
+                {% endif %}
                 <button class="btn-download" onclick="downloadReport('{{ pipeline.id }}')">
                     <span>📄</span> Download PDF Report
                 </button>
@@ -240,6 +245,18 @@
             <div class="info-card">
                 <div class="info-label">Repository</div>
                 <div class="info-value">{{ pipeline.repository }}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Deployment Status</div>
+                <div class="info-value">
+                    {% if pipeline.stage_deploy_status == 'completed' %}
+                        <span class="status-badge status-success">ACTIVE (Port: {{ pipeline.deployed_port }})</span>
+                    {% elif pipeline.status == 'blocked' %}
+                        <span class="status-badge status-blocked">BLOCKED</span>
+                    {% else %}
+                        <span class="status-badge status-waiting">INACTIVE</span>
+                    {% endif %}
+                </div>
             </div>
             <div class="info-card">
                 <div class="info-label">Branch</div>

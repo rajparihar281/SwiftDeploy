@@ -81,6 +81,7 @@
                 await Promise.all([
                     loadMetrics(), 
                     loadActivePipelines(),
+                    loadActiveDeployments(),
                     loadSystemMetrics(),
                     loadDecision()
                 ]);
@@ -117,6 +118,13 @@
         if (history) {
             state.historyPipelines = history;
             renderRecentPipelines(history.slice(0, 8));
+        }
+    }
+
+    async function loadActiveDeployments() {
+        const data = await fetchJSON('/api/deployments/active');
+        if (data) {
+            renderActiveDeployments(data);
         }
     }
 
@@ -359,6 +367,48 @@
         refreshLucide();
     }
 
+    function renderActiveDeployments(deployments) {
+        const container = document.getElementById('active-deployments');
+        if (!container) return;
+
+        if (!deployments.length) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-state-icon">🚢</div>
+                    <div class="empty-state-text">No active project deployments</div>
+                </div>`;
+            return;
+        }
+
+        container.innerHTML = deployments.map(d => `
+            <div class="pipeline-card" style="border-left: 4px solid var(--status-success);">
+                <div class="pipeline-header">
+                    <div class="pipeline-info">
+                        <div class="pipeline-repo">
+                            <i data-lucide="package" size="16" style="margin-right: 4px;"></i>
+                            ${escapeHtml(d.repository || 'Unknown Project')}
+                            <span class="status-badge status-success">
+                                <i data-lucide="check-circle" size="11"></i>
+                                LIVE
+                            </span>
+                        </div>
+                        <div class="pipeline-meta">
+                            <span class="pipeline-meta-item"><i data-lucide="hash" size="12"></i> Build #${d.pipeline_id.split('-').pop()}</span>
+                            <span class="pipeline-meta-item"><i data-lucide="link" size="12"></i> Port: ${d.deployed_port}</span>
+                            <span class="pipeline-meta-item"><i data-lucide="activity" size="12"></i> Status: RUNNING</span>
+                        </div>
+                    </div>
+                    <div class="pipeline-actions" style="margin-left: auto;">
+                        <a href="${d.deployed_url}" target="_blank" class="log-viewer-btn" style="background: var(--status-success); color: white; border: none; text-decoration: none; display: flex; align-items: center; gap: 6px;">
+                            <i data-lucide="external-link" size="14"></i> Open Application
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        refreshLucide();
+    }
+
     // ---- Render: Recent Pipelines ----
     function renderRecentPipelines(pipelines) {
         const container = document.getElementById('recent-pipelines');
@@ -377,8 +427,6 @@
         attachPipelineCardEvents(container);
         refreshLucide();
     }
-
-    // ---- Build Pipeline Card HTML ----
     function buildPipelineCard(p) {
         const stages = p.stages || [];
         const stageTimeline = stages.map(s => {
@@ -425,6 +473,8 @@
                         <span class="pipeline-meta-item"><i data-lucide="user" size="12"></i> ${escapeHtml(p.commit_author || '—')}</span>
                         <span class="pipeline-meta-item"><i data-lucide="calendar" size="12"></i> ${createdFormatted}</span>
                         <span class="pipeline-meta-item"><i data-lucide="clock" size="12"></i> ${duration}</span>
+                        <span class="pipeline-meta-item"><i data-lucide="zap" size="12"></i> Waste: ${p.governance_explanation && p.governance_explanation.includes('Waste Score:') ? p.governance_explanation.match(/Waste Score: ([\d.]+)/)[1] : '—'}</span>
+                        <span class="pipeline-meta-item"><i data-lucide="shield" size="12"></i> ${p.governance_decision || '—'}</span>
                     </div>
                     <div class="pipeline-commit-msg">"${escapeHtml(p.commit_message || '')}"</div>
                 </div>
