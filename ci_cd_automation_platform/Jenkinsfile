@@ -301,7 +301,7 @@ pipeline {
                             container_health: 'healthy',
                             deployed_port: deployPort,
                             deployed_url: deployedUrl,
-                            total_pipeline_duration: (System.currentTimeMillis() - env.PIPELINE_START_TIME) / 1000.0,
+                            total_pipeline_duration: (System.currentTimeMillis() - env.PIPELINE_START_TIME.toLong()) / 1000.0,
                             commit_id: env.GIT_COMMIT,
                             commit_author: env.GIT_AUTHOR,
                             commit_message: env.GIT_MESSAGE,
