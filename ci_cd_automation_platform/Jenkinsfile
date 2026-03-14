@@ -227,23 +227,30 @@ pipeline {
                     def stageStart = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                     try {
                         def projectDir = params.PROJECT_DIR ?: "."
-                        // Clean up projectDir path
-                        if (projectDir.startsWith("./")) projectDir = projectDir.substring(2)
                         
-                        env.PROJECT_NAME = projectDir.replaceAll("[^a-zA-Z0-9]", "_")
+                        // Normalize projectDir (remove leading ./ or leading . if followed by projects)
+                        if (projectDir.startsWith("./")) {
+                            projectDir = projectDir.substring(2)
+                        } else if (projectDir.startsWith(".projects")) {
+                            projectDir = projectDir.substring(1)
+                        } else if (projectDir == ".") {
+                            projectDir = ""
+                        }
+                        
+                        env.PROJECT_NAME = projectDir ? projectDir.replaceAll("[^a-zA-Z0-9]", "_") : "root"
                         env.DOCKER_TAG = "${env.BUILD_ID}"
                         env.FULL_IMAGE_NAME = "${env.DOCKER_IMAGE_BASE}_${env.PROJECT_NAME}"
 
                         echo "Building Docker image for project in: ${env.PLATFORM_DIR}/${projectDir}"
                         
                         // Check if Dockerfile exists in project dir, if not use platform root's Dockerfile as fallback but with project context
-                        def dockerfileDir = projectDir
-                        if (!fileExists("${env.PLATFORM_DIR}/${projectDir}/Dockerfile")) {
+                        def dockerfileDir = projectDir ?: "."
+                        if (projectDir && !fileExists("${env.PLATFORM_DIR}/${projectDir}/Dockerfile")) {
                             echo "No Dockerfile found in ${projectDir}, using default from platform root."
                             dockerfileDir = "."
                         }
 
-                        bat "cd ${env.PLATFORM_DIR} && docker build -t ${env.FULL_IMAGE_NAME}:${env.DOCKER_TAG} -f ${dockerfileDir}/Dockerfile ${projectDir}"
+                        bat "cd ${env.PLATFORM_DIR} && docker build -t ${env.FULL_IMAGE_NAME}:${env.DOCKER_TAG} -f ${dockerfileDir}/Dockerfile ${projectDir ?: '.'}"
                         
                         def stageEnd = new Date().format("yyyy-MM-dd'T'HH:mm:ss")
                         reportStage('build', stageStart, stageEnd, 'completed')
@@ -263,6 +270,12 @@ pipeline {
                     try {
                         // Determine port based on project
                         def projectDir = params.PROJECT_DIR ?: "."
+                        if (projectDir.startsWith("./")) {
+                            projectDir = projectDir.substring(2)
+                        } else if (projectDir.startsWith(".projects")) {
+                            projectDir = projectDir.substring(1)
+                        }
+
                         def deployPort = 6000
                         if (projectDir.contains("blocked")) deployPort = 7000
                         else if (projectDir.contains("allowed")) deployPort = 6000
